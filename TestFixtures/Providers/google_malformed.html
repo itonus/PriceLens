@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<!-- Malformed fixture: broken cards, missing prices, weird nesting. Parser must not crash. -->
+<html lang="pl">
+<head><title>broken</title>
+<script type="application/ld+json">{ "@type": "Product", "name": </script>
+</head>
+<body>
+<div class="product-card">
+  <a href="/shopping/product/">??</a>
+  <div><span>zł</span>
+</div>
+<div class="product-card"><a>No href at all</a></div>
+<a href="/url?q=">empty redirect</a>
+</body>
+</html>

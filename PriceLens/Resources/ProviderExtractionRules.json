@@ -1,0 +1,19 @@
+{
+  "stopwords": [
+    "promocja", "promo", "rabat", "wyprzedaż", "wyprzedaz", "gazetka", "okazja",
+    "cena", "cena za", "super", "tanio", "nowość", "nowosc", "hit",
+    "sale", "offer", "special", "price", "discount", "deal", "new",
+    "распродажа", "скидка", "акция", "цена", "новинка",
+    "zł", "pln", "szt", "szt.", "opak", "opak.", "kg", "gr", "ml",
+    "cena jednostkowa", "za sztukę", "za sztuke", "karta", "lojalnościowa", "lojalnosciowa"
+  ],
+  "brandHints": [
+    "Sony", "Samsung", "LG", "Philips", "Bosch", "Apple", "Xiaomi", "Lenovo",
+    "HP", "Dell", "Asus", "Acer", "JBL", "Bose", "Sennheiser", "Panasonic",
+    "Canon", "Nikon", "Electrolux", "Whirlpool", "Beko", "Amica", "Zelmer",
+    "Tefal", "Braun", "Oral-B", "Gillette", "Nivea", "L'Oreal", "Adidas", "Nike",
+    "Puma", "Lego", "Hasbro", "Mattel", "Nutella", "Milka", "Lipton", "Nescafe",
+    "Dyson", "Gorenje", "Siemens", "AEG", "Miele", "Rowenta", "Krups", "DeLonghi",
+    "Motorola", "Huawei", "Realme", "Oppo", "Honor", "Garmin", "Fitbit"
+  ]
+}

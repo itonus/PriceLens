@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<!-- Malformed fixture: truncated JSON, empty articles, bad anchors. Parser must not crash. -->
+<html lang="pl">
+<head><title>broken</title>
+<script type="application/json" id="listing-state">{"items":{"url":"/oferta/</script>
+</head>
+<body>
+<article><a href="">empty</a></article>
+<article>No anchor at all <span>1 000,00 zł</span></article>
+<article><a href="/oferta/999">No price here</a></article>
+</body>
+</html>

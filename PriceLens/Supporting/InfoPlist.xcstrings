@@ -1,0 +1,22 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PriceLens uses the camera to recognize product barcodes, labels, and prices for comparison."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PriceLens использует камеру для распознавания штрихкодов, этикеток и цен, чтобы сравнивать предложения."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
