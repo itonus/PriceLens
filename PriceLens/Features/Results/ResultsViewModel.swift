@@ -54,9 +54,12 @@ final class ResultsViewModel {
         container.searchCoordinator.cancelCurrent()
     }
 
-    /// Resolves what the barcode actually is, then re-runs the search with the real product
-    /// name. OCR text from packaging is unreliable (serials, lot codes, shipping labels), so a
-    /// confirmed product name is a far better query — but only when lookup genuinely succeeds.
+    /// Resolves what the barcode actually is, for display only.
+    ///
+    /// The result names the product and supplies its image, which is what makes the sheet
+    /// readable — but it deliberately does **not** re-run the search. The barcode already
+    /// identifies this exact product; re-querying by name would trade that precision for a
+    /// phrase the retailer may word differently, and pull in neighbouring variants.
     private func resolveProductIfPossible() {
         resolveTask?.cancel()
         guard let resolver = container.productResolver,
@@ -64,15 +67,10 @@ final class ResultsViewModel {
 
         resolveTask = Task { [weak self] in
             guard let self, let resolved = await resolver.resolve(barcode: barcode) else { return }
-            guard !Task.isCancelled, let title = resolved.displayTitle else { return }
+            guard !Task.isCancelled, resolved.displayTitle != nil else { return }
             self.resolvedProduct = resolved
-
-            // Adopt the confirmed identity and search again with it.
-            guard title.caseInsensitiveCompare(self.identity.query) != .orderedSame else { return }
-            self.identity.brand = resolved.brand ?? self.identity.brand
-            self.identity.titleHint = title
-            self.identity.query = title
-            self.start()
+            // Brand helps match confidence scoring; the query itself stays the barcode.
+            self.identity.brand = self.identity.brand ?? resolved.brand
         }
     }
 
