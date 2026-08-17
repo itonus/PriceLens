@@ -92,11 +92,27 @@ xcodegen generate
 
 No user account is accessed. The application token reads public listing data only.
 
-## Security
+## Security and Allegro's terms
+
+> ### ⚠️ Do not distribute a build containing your credentials
+>
+> Allegro's developer console states that sharing your API key or Client Secret with another party
+> or application breaches the REST API terms, and lists sanctions up to and including **a
+> contractual penalty of 50 000 PLN**.
+>
+> A credential bundled into a distributed app can be extracted from the binary, so shipping one to
+> other people means handing them your secret. Applications registered "for my own account's
+> purposes" are licensed for personal use only.
+>
+> **Personal use on your own device: fine.** **Distributing to anyone else: don't** — use a backend
+> that holds the secret server-side.
 
 A credential bundled into an app **ships inside the binary and can be extracted from it.** No
 amount of obfuscation changes that; it is inherent to calling a credentialed API directly from a
 client with no server.
+
+If a secret is ever pasted into a chat, an issue, a log, or a screenshot, treat it as disclosed and
+rotate it in the Allegro console.
 
 Consequences to accept before using this:
 
