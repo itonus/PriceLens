@@ -15,6 +15,8 @@ struct FixtureSearchProvider: SearchProvider {
     func search(_ request: ProductSearchRequest) async -> ProviderSearchResult {
         try? await Task.sleep(for: simulatedDelay)
         let searchURL: URL = switch id {
+        case .ceneo:
+            CeneoSearchURLBuilder().searchURL(query: request.query)
         case .google:
             GoogleSearchURLBuilder().searchURL(query: request.query, countryCode: "PL", language: "pl")
         case .allegro:
@@ -32,8 +34,12 @@ struct FixtureSearchProvider: SearchProvider {
             }
             return successResult(searchURL: searchURL, offers: Self.allegroOffers)
         case .successfulScan, .noStorePrice:
-            return successResult(searchURL: searchURL,
-                                 offers: id == .google ? Self.googleOffers : Self.allegroOffers)
+            let offers: [OfferCandidate] = switch id {
+            case .ceneo: Self.ceneoOffers
+            case .google: Self.googleOffers
+            case .allegro: Self.allegroOffers
+            }
+            return successResult(searchURL: searchURL, offers: offers)
         }
     }
 
@@ -41,6 +47,19 @@ struct FixtureSearchProvider: SearchProvider {
         ProviderSearchResult(provider: id, state: .success, searchURL: searchURL,
                              offers: offers, duration: simulatedDelay, debugSummary: "fixture: success")
     }
+
+    static let ceneoOffers: [OfferCandidate] = [
+        OfferCandidate(provider: .ceneo,
+                       title: "Sony WH-1000XM6 Bezprzewodowe słuchawki ANC",
+                       url: URL(string: "https://www.ceneo.pl/163805693")!,
+                       rawPriceText: "1529.00",
+                       parsedItemPrice: Money(amount: 1529.00, currencyCode: "PLN"),
+                       rawDeliveryText: nil,
+                       parsedDeliveryPrice: nil,
+                       seller: nil,
+                       imageURL: nil,
+                       evidence: OfferEvidence(brand: "Sony", extractionStrategy: "product-row"))
+    ]
 
     static let googleOffers: [OfferCandidate] = [
         OfferCandidate(provider: .google,

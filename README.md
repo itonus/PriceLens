@@ -31,8 +31,9 @@ Being straight about this matters more than a nice feature list.
 | Barcode → product name + image | ✅ Works for food/grocery items |
 | Barcode → product for non-food | ⚠️ Often unavailable — Open Food Facts is a *food* database |
 | Shelf price OCR + comparison | ✅ Works when a price is legible in frame |
-| Allegro offers (with API credentials) | ❌ Blocked — Allegro requires **manual app verification** for offer search |
-| Allegro offers (without credentials) | ❌ Falls back to opening a search link |
+| **Ceneo offers (prices, images, links)** | ✅ **Works** — barcode and name search both resolve |
+| Allegro — open search in the app | ✅ Deep link from the result sheet |
+| Allegro offers in-app | ❌ Anti-bot page; API needs **manual app verification** |
 | Google Shopping offers | ❌ **Not possible** — see below |
 | Local history, i18n, accessibility | ✅ Works |
 
@@ -48,6 +49,24 @@ consent wall, and **this project will not click through consent or anti-bot chal
 So Google is a one-tap fallback link, not a source of in-app offers. Rather than fake it, the app
 says "results couldn't be read" and hands you the link.
 
+### Where offers come from: Ceneo
+
+[Ceneo.pl](https://www.ceneo.pl) is a Polish price-comparison site that serves **complete
+server-rendered listings** — no JavaScript gate, no anti-bot interstitial. Each result carries
+explicit data attributes (name, lowest price, brand, product id, thumbnail) plus JSON-LD, so
+offers parse reliably into cards with prices, images and links.
+
+Both search modes work, which suits a scanner-first flow:
+
+```
+8004260487900 → Regina Delicatis Chusteczki Higieniczne 96 Sztuk — 8.72 PLN
+haribo wummis → 4 offers, 3.81–45.70 PLN
+lego 42171    → LEGO Technic Mercedes-AMG F1 W14 — 664.99 PLN
+```
+
+Ceneo lists the *lowest item price across shops*; it does not state delivery cost, so delivery
+stays unknown rather than being assumed free.
+
 ### Why Allegro offers don't work either
 
 Two independent walls:
@@ -59,16 +78,19 @@ Two independent walls:
    verified applications**. Registering an app is not sufficient.
 
 The API client is implemented and correct; it starts returning offers the moment an application is
-verified. Until then the app reports "Allegro app not verified" and offers a search link. See
-[docs/ALLEGRO_API_SETUP.md](docs/ALLEGRO_API_SETUP.md) for the endpoint-by-endpoint test results.
+verified. See [docs/ALLEGRO_API_SETUP.md](docs/ALLEGRO_API_SETUP.md) for the endpoint-by-endpoint
+test results.
+
+Because neither route works, Allegro is not wired as an offer provider. Instead the result sheet
+offers **Open in Allegro**, a universal link that hands the search to the Allegro app when it is
+installed and falls back to the browser otherwise.
 
 ### The honest bottom line
 
-**There is currently no working source of in-app price cards.** Both providers are gated in ways no
-client-side code can legitimately solve. Getting real prices requires either an approved Allegro
-application, a commercial pricing API, or a backend — all of which conflict with this project's
-no-backend, no-paid-API constraints. Product *identification* works well; price *comparison* is
-where reality bites.
+Offers come from **Ceneo only**. Google and Allegro are gated in ways no client-side code can
+legitimately solve, and the app says so plainly rather than showing an empty list. If Ceneo changes
+its markup or blocks scraping, in-app offers stop — the fallback link remains, and a backend or a
+commercial pricing API would be the durable answer.
 
 ## Requirements
 

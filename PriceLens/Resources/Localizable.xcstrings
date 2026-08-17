@@ -1190,6 +1190,40 @@
           }
         }
       }
+    },
+    "fallback.openProvider": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@ results"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть результаты %@"
+          }
+        }
+      }
+    },
+    "results.openAllegro": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Allegro"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть в Allegro"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

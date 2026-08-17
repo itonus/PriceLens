@@ -6,6 +6,7 @@ enum Log {
 
     static let scanner = Logger(subsystem: subsystem, category: "scanner")
     static let recognition = Logger(subsystem: subsystem, category: "recognition")
+    static let ceneo = Logger(subsystem: subsystem, category: "search.ceneo")
     static let google = Logger(subsystem: subsystem, category: "search.google")
     static let allegro = Logger(subsystem: subsystem, category: "search.allegro")
     static let matching = Logger(subsystem: subsystem, category: "matching")

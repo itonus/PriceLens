@@ -28,11 +28,12 @@ struct SettingsView: View {
                     }
                 }
 
+                // Ceneo is the only offer source; Google and Allegro cannot be scraped, so
+                // showing toggles for them would imply capability the app does not have.
+                // Allegro stays reachable as a deep link from the result sheet.
                 Section(settings.localized("settings.search")) {
-                    Toggle("Google", isOn: googleBinding)
-                        .accessibilityIdentifier("googleToggle")
-                    Toggle("Allegro", isOn: allegroBinding)
-                        .accessibilityIdentifier("allegroToggle")
+                    Toggle("Ceneo", isOn: ceneoBinding)
+                        .accessibilityIdentifier("ceneoToggle")
                 }
 
                 Section(settings.localized("settings.data")) {
@@ -89,6 +90,11 @@ struct SettingsView: View {
         case .english: return "English"
         case .russian: return "Русский"
         }
+    }
+
+    private var ceneoBinding: Binding<Bool> {
+        Binding(get: { settings.isCeneoEnabled },
+                set: { settings.setProvider(.ceneo, enabled: $0) })
     }
 
     private var googleBinding: Binding<Bool> {

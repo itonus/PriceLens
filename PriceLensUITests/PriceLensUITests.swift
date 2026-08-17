@@ -25,11 +25,8 @@ final class PriceLensUITests: XCTestCase {
         XCTAssertTrue(waitFor(element(app, "decisionBadge")),
                       "Decision badge should appear after fixture lock + search")
 
-        let viewOffers = element(app, "viewOffersButton")
-        XCTAssertTrue(viewOffers.exists)
-        viewOffers.tap()
-
-        XCTAssertTrue(waitFor(element(app, "sortMenu")), "Sort menu should exist in expanded sheet")
+        // Offers are the content of the sheet — no "view offers" step to tap through.
+        XCTAssertTrue(waitFor(element(app, "sortMenu")), "Sort menu should be present with offers")
         XCTAssertTrue(waitFor(element(app, "offerCard_google"), timeout: 10),
                       "Google offer card should be listed")
     }
@@ -58,7 +55,6 @@ final class PriceLensUITests: XCTestCase {
         let app = launch("providerFailure")
 
         XCTAssertTrue(waitFor(element(app, "decisionBadge")))
-        element(app, "viewOffersButton").tap()
 
         XCTAssertTrue(waitFor(element(app, "fallback_google"), timeout: 10),
                       "Google fallback should be visible")

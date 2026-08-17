@@ -60,15 +60,13 @@ final class AppContainer {
         } else {
             self.productResolver = OpenFoodFactsResolver()
             self.scanner = LiveScannerProvider(config: config)
-            // Allegro's listing page serves a DataDome interstitial, so scraping cannot return
-            // offers — prefer the official API whenever credentials are present, and only fall
-            // back to the (best-effort) HTML adapter when they are not.
-            let allegro: any SearchProvider = AllegroAPICredentials.isConfigured
-                ? AllegroAPISearchProvider(config: config)
-                : AllegroWebSearchProvider(config: config)
+            // Ceneo only. Google's shopping surface is JS-gated and Allegro's listing page is
+            // behind an anti-bot interstitial (its API additionally requires manual application
+            // verification), so neither can return offers. Ceneo serves complete server-rendered
+            // listings. Allegro remains reachable as a deep link from the result sheet.
             self.searchCoordinator = SearchCoordinator(
                 config: config,
-                providers: [GoogleWebSearchProvider(config: config), allegro],
+                providers: [CeneoWebSearchProvider(config: config)],
                 persistedCache: persistedCache
             )
         }

@@ -38,6 +38,11 @@ final class SearchCoordinator {
         self.providers = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
     }
 
+    /// Providers that are actually wired up. Callers must intersect their enabled set with this:
+    /// asking for an unregistered provider would leave its status spinning forever, because no
+    /// result is ever emitted for it.
+    var registeredProviderIDs: Set<SearchProviderID> { Set(providers.keys) }
+
     func cancelCurrent() {
         currentTask?.cancel()
         currentTask = nil

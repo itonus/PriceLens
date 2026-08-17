@@ -36,9 +36,22 @@ struct DecisionBadge: View {
     }
 
     var body: some View {
-        Label(text, systemImage: icon)
-            .font(prominent ? .title3.weight(.bold) : .headline)
-            .foregroundStyle(color)
-            .accessibilityElement(children: .combine)
+        if prominent {
+            // The verdict is the answer the user opened the app for, so it reads as a filled
+            // banner rather than a line of text. Colour is reinforced by icon + wording, never
+            // carried alone (accessibility, and colour-blind users).
+            Label(text, systemImage: icon)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(color)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Tokens.Spacing.s)
+                .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: Tokens.Corner.card))
+                .accessibilityElement(children: .combine)
+        } else {
+            Label(text, systemImage: icon)
+                .font(.headline)
+                .foregroundStyle(color)
+                .accessibilityElement(children: .combine)
+        }
     }
 }

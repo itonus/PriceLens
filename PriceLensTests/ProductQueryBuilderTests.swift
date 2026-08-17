@@ -95,6 +95,22 @@ struct ProductQueryBuilderTests {
     /// "TEAM: PSUZ") must not be mistaken for the product name/model — their alphanumeric codes
     /// otherwise look exactly like a plausible model number. The real descriptive line
     /// ("XBOX SERIES X 1TB...") should be used instead.
+    /// Regression: multilingual packaging contains ordinary words that collide with short
+    /// acronym brands — Estonian "kõlblikkuse aeg piiramata" (shelf life unlimited) was
+    /// matching the appliance brand AEG. Short hints must match the exact uppercase form.
+    @Test func lowercaseWordDoesNotMatchShortAcronymBrand() {
+        let result = builder.build(barcode: "8004260487900",
+                                   recognizedText: ["kõlblikkuse aeg piiramata",
+                                                    "termin ważności nieograniczony"])
+        #expect(result.brand == nil)
+        #expect(result.query != "AEG")
+    }
+
+    @Test func uppercaseAcronymBrandStillDetected() {
+        let result = builder.build(barcode: nil, recognizedText: ["AEG", "L6FBG49SK"])
+        #expect(result.brand == "AEG")
+    }
+
     @Test func shippingLabelLinesExcludedFromIdentity() {
         let result = builder.build(barcode: "889842640724", recognizedText: [
             "TEAM: PSUZ", "LOT NO/DATE:2316X", "WO 23477096", "MODEL NO:1882",
@@ -105,5 +121,19 @@ struct ProductQueryBuilderTests {
         #expect(!result.query.contains("2316X"))
         #expect(!result.query.contains("23477096"))
         #expect(!result.query.contains("1882"))
+    }
+
+    /// Regression: manufacturer address lines ("g.29 Kaunas, Lietuva", "ul. Mleczarska 31,
+    /// 06-400 Ciechanów") are not product identity — house numbers like "g.29" otherwise score
+    /// as plausible model tokens.
+    @Test func addressLinesExcludedFromIdentity() {
+        let result = builder.build(barcode: "8004260487900", recognizedText: [
+            "g.29 Kaunas, Lietuva",
+            "ul. Mleczarska 31, 06-400 Ciechanów, Polska",
+            "Bullu iela 74, Riga, LV - 1067, Latvija",
+        ])
+        #expect(result.model == nil)
+        #expect(!result.query.contains("g.29"))
+        #expect(!result.query.contains("29"))
     }
 }

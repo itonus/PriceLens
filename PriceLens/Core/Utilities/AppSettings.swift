@@ -13,6 +13,10 @@ final class AppSettings {
         }
     }
 
+    var isCeneoEnabled: Bool {
+        didSet { defaults.set(isCeneoEnabled, forKey: Keys.ceneoEnabled) }
+    }
+
     var isGoogleEnabled: Bool {
         didSet { defaults.set(isGoogleEnabled, forKey: Keys.googleEnabled) }
     }
@@ -26,6 +30,7 @@ final class AppSettings {
 
     private enum Keys {
         static let language = "settings.language"
+        static let ceneoEnabled = "settings.ceneoEnabled"
         static let googleEnabled = "settings.googleEnabled"
         static let allegroEnabled = "settings.allegroEnabled"
     }
@@ -34,6 +39,7 @@ final class AppSettings {
         self.defaults = defaults
         let rawLanguage = defaults.string(forKey: Keys.language) ?? AppLanguage.system.rawValue
         self.language = AppLanguage(rawValue: rawLanguage) ?? .system
+        self.isCeneoEnabled = defaults.object(forKey: Keys.ceneoEnabled) as? Bool ?? true
         self.isGoogleEnabled = defaults.object(forKey: Keys.googleEnabled) as? Bool ?? true
         self.isAllegroEnabled = defaults.object(forKey: Keys.allegroEnabled) as? Bool ?? true
     }
@@ -41,17 +47,19 @@ final class AppSettings {
     /// At least one provider must remain enabled.
     func setProvider(_ provider: SearchProviderID, enabled: Bool) {
         switch provider {
-        case .google:
-            isGoogleEnabled = enabled
-            if !isGoogleEnabled && !isAllegroEnabled { isAllegroEnabled = true }
-        case .allegro:
-            isAllegroEnabled = enabled
-            if !isAllegroEnabled && !isGoogleEnabled { isGoogleEnabled = true }
+        case .ceneo: isCeneoEnabled = enabled
+        case .google: isGoogleEnabled = enabled
+        case .allegro: isAllegroEnabled = enabled
+        }
+        if !isCeneoEnabled && !isGoogleEnabled && !isAllegroEnabled {
+            // Re-enable the one provider that actually returns offers today.
+            isCeneoEnabled = true
         }
     }
 
     func isProviderEnabled(_ provider: SearchProviderID) -> Bool {
         switch provider {
+        case .ceneo: return isCeneoEnabled
         case .google: return isGoogleEnabled
         case .allegro: return isAllegroEnabled
         }

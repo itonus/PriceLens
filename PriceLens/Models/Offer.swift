@@ -1,6 +1,7 @@
 import Foundation
 
 enum SearchProviderID: String, Codable, Sendable, CaseIterable, Identifiable {
+    case ceneo
     case google
     case allegro
 
@@ -8,6 +9,7 @@ enum SearchProviderID: String, Codable, Sendable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .ceneo: return "Ceneo"
         case .google: return "Google"
         case .allegro: return "Allegro"
         }

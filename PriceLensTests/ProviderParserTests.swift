@@ -127,3 +127,53 @@ struct StructuredDataExtractorTests {
         #expect(products.allSatisfy { $0.price != nil })
     }
 }
+
+@Suite("CeneoOfferHTMLParser")
+struct CeneoParserTests {
+    let parser = CeneoOfferHTMLParser()
+    let base = URL(string: "https://www.ceneo.pl/szukaj-haribo+wummis")!
+
+    @Test func successFixtureYieldsOffers() {
+        let (offers, diagnostics) = parser.parse(html: fixture("ceneo_success"), baseURL: base)
+        #expect(offers.count == 2)
+        #expect(diagnostics.strategyUsed == "product-row")
+
+        let first = try? #require(offers.first)
+        #expect(first?.title == "Haribo Wummis Dżdżownice Żelki Owocowe 85g")
+        #expect(first?.parsedItemPrice == Money(amount: 3.81, currencyCode: "PLN"))
+        #expect(first?.url.absoluteString == "https://www.ceneo.pl/171393043")
+        // Protocol-relative thumbnails must be resolved to https.
+        #expect(first?.imageURL?.scheme == "https")
+        // Ceneo does not state delivery cost: it must stay unknown, never assumed free.
+        #expect(first?.parsedDeliveryPrice == nil)
+    }
+
+    @Test func noResultsFixtureYieldsEmpty() {
+        let (offers, _) = parser.parse(html: fixture("ceneo_no_results"), baseURL: base)
+        #expect(offers.isEmpty)
+    }
+
+    @Test func malformedFixtureDoesNotCrash() {
+        let (offers, _) = parser.parse(html: fixture("ceneo_malformed"), baseURL: base)
+        // Empty, non-numeric and negative prices are all rejected rather than surfaced.
+        #expect(offers.isEmpty)
+    }
+
+    @Test func garbageInputDoesNotCrash() {
+        for garbage in ["", "<<<>>>", "{\"a\":1}", String(repeating: "<div>", count: 500)] {
+            let (offers, _) = parser.parse(html: garbage, baseURL: base)
+            #expect(offers.isEmpty)
+        }
+    }
+}
+
+@Suite("CeneoSearchURLBuilder")
+struct CeneoURLTests {
+    @Test func encodesPhraseAndBarcode() {
+        let builder = CeneoSearchURLBuilder()
+        #expect(builder.searchURL(query: "8004260487900").absoluteString
+                == "https://www.ceneo.pl/szukaj-8004260487900")
+        #expect(builder.searchURL(query: "haribo wummis").absoluteString
+                == "https://www.ceneo.pl/szukaj-haribo+wummis")
+    }
+}

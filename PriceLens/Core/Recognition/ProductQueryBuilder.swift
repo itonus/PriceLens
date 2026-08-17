@@ -52,7 +52,12 @@ struct ProductQueryBuilder: Sendable {
 
     func detectBrand(in lines: [String]) -> String? {
         for line in lines {
+            guard !isNoiseLabelLine(line) else { continue }
             let lineTokens = Set(TextNormalizer.tokens(line))
+            // Raw (unfolded) tokens, so short acronym brands can be checked case-sensitively.
+            let rawTokens = Set(line.split(whereSeparator: { $0.isWhitespace })
+                .map { $0.trimmingCharacters(in: .punctuationCharacters) })
+
             for hint in lexicon.brandHints {
                 let hintTokens = TextNormalizer.tokens(hint)
                 guard !hintTokens.isEmpty else { continue }
@@ -60,6 +65,13 @@ struct ProductQueryBuilder: Sendable {
                 // "L'Oreal" or "Oral-B" fold to ["l","oreal"]/["oral","b"], and matching only
                 // the first token means a single stray "l" from OCR noise falsely matches.
                 guard hintTokens.allSatisfy({ lineTokens.contains($0) }) else { continue }
+
+                // Short acronym brands (AEG, LG, HP) collide with ordinary words in other
+                // languages — Estonian "aeg" (time) on multilingual packaging matched AEG.
+                // Case-folded matching is too weak for these: demand the exact uppercase form.
+                if hint.count <= 3 {
+                    guard rawTokens.contains(hint.uppercased()) else { continue }
+                }
                 return hint
             }
         }
@@ -108,9 +120,24 @@ struct ProductQueryBuilder: Sendable {
         "made", "distribution", "ref", "qty", "exp", "part", "pn", "model"
     ]
 
+    /// Address/contact markers, incl. street abbreviations across the languages that appear on
+    /// EU packaging: ul./g./vul./iela/str./tel./fax/email. A line like
+    /// "г.29 Kaunas, Lietuva" or "ul. Mleczarska 31, 06-400 Ciechanów" is a manufacturer address,
+    /// and its house numbers ("g.29") otherwise score as plausible model tokens.
+    private static let addressMarkers: Set<String> = [
+        "ul", "al", "os", "pl", "g", "gatve", "vul", "iela", "str", "korp", "kom",
+        "tel", "fax", "faks", "mail", "email", "www", "biuro", "sp", "zoo", "ooo", "sooo"
+    ]
+
     private func isNoiseLabelLine(_ line: String) -> Bool {
-        guard let first = TextNormalizer.tokens(line).first else { return false }
-        return Self.noiseLineStarters.contains(first)
+        let tokens = TextNormalizer.tokens(line)
+        guard let first = tokens.first else { return false }
+        if Self.noiseLineStarters.contains(first) { return true }
+        // Address markers can appear anywhere in the line, not only at the start.
+        if tokens.contains(where: { Self.addressMarkers.contains($0) }) { return true }
+        // Postal codes ("06-400") are a strong address signal on their own.
+        if line.range(of: #"\b\d{2}-\d{3}\b"#, options: .regularExpression) != nil { return true }
+        return false
     }
 
     private func isBrandToken(_ token: String) -> Bool {

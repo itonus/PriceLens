@@ -6,6 +6,9 @@ struct ResultSheetView: View {
     @Environment(AppContainer.self) private var container
     @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
+    /// Used for the Allegro hand-off: an in-app Safari view cannot pass a universal link to
+    /// the installed Allegro app, but `openURL` can.
+    @Environment(\.openURL) private var openURL
 
     let viewModel: ResultsViewModel
     @State private var safariURL: URL?
@@ -37,11 +40,12 @@ struct ResultSheetView: View {
     private func content(_ vm: ResultsViewModel) -> some View {
         NavigationStack {
             ScrollView {
+                // One continuous list: verdict first, then the offer cards. There is no
+                // "view offers" step — the offers are the content, so they are always present
+                // and simply scroll into view as the sheet is dragged up.
                 VStack(alignment: .leading, spacing: Tokens.Spacing.m) {
                     peekContent(vm)
-                    if selectedDetent != .height(340) {
-                        expandedContent(vm)
-                    }
+                    expandedContent(vm)
                 }
                 .padding(.horizontal, Tokens.Spacing.m)
                 .padding(.bottom, Tokens.Spacing.l)
@@ -132,24 +136,31 @@ struct ResultSheetView: View {
                 .accessibilityIdentifier("decisionBadge")
         }
 
-        // Actions
-        HStack(spacing: Tokens.Spacing.s) {
-            Button(settings.localized("results.viewOffers")) {
-                selectedDetent = .large
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("viewOffersButton")
+        HStack(spacing: Tokens.Spacing.m) {
+            // Correcting the query is a recovery path, not a primary action: keep it available
+            // but quiet, so the verdict and the offers stay the focus.
             Button(settings.localized("action.edit")) { beginEditing(vm) }
-                .buttonStyle(.bordered)
                 .accessibilityIdentifier("editButton")
-        }
 
-        // Offline / failure inline states in peek when no offers at all.
-        // Only while collapsed: the expanded sheet renders peek *and* expanded content, and
-        // `expandedContent` shows the same fallbacks — without this guard they appear twice.
-        if vm.isFinished, vm.offers.isEmpty, selectedDetent == .height(340) {
-            fallbackArea(vm)
+            Spacer()
+
+            Button {
+                openURL(allegroSearchURL(vm))
+            } label: {
+                Label(settings.localized("results.openAllegro"), systemImage: "arrow.up.forward.app")
+            }
+            .accessibilityIdentifier("openAllegroButton")
         }
+        .font(.subheadline)
+    }
+
+    /// Allegro search as a universal link: iOS hands this to the Allegro app when installed and
+    /// falls back to the browser otherwise. Must be opened with `openURL`, not an in-app Safari
+    /// view, or the hand-off never happens.
+    private func allegroSearchURL(_ vm: ResultsViewModel) -> URL {
+        let phrase = vm.resolvedProduct?.displayTitle ?? vm.identity.query
+        let query = phrase.isEmpty ? (vm.identity.barcode ?? "") : phrase
+        return AllegroSearchURLBuilder().searchURL(query: query)
     }
 
     // MARK: - Expanded: offers, editing, fallbacks
@@ -231,9 +242,7 @@ struct ResultSheetView: View {
                let url = status.searchURL {
                 InlineErrorState(
                     message: fallbackMessage(provider: provider, state: state),
-                    openTitle: provider == .google
-                        ? settings.localized("fallback.openGoogle")
-                        : settings.localized("fallback.openAllegro"),
+                    openTitle: fallbackOpenTitle(provider),
                     onOpen: { safariURL = url },
                     retryTitle: state == .offline || state == .failed ? settings.localized("action.retry") : nil,
                     onRetry: state == .offline || state == .failed ? { vm.retry() } : nil
@@ -256,6 +265,17 @@ struct ResultSheetView: View {
         if vm.identity.barcode != nil { return settings.localized("identity.barcode") }
         if vm.identity.model != nil { return settings.localized("identity.likelyModel") }
         return settings.localized("identity.textSearch")
+    }
+
+    /// "Open <provider> results". Ceneo has no dedicated string yet, so it uses the generic
+    /// format rather than showing an untranslated key.
+    private func fallbackOpenTitle(_ provider: SearchProviderID) -> String {
+        switch provider {
+        case .google: return settings.localized("fallback.openGoogle")
+        case .allegro: return settings.localized("fallback.openAllegro")
+        case .ceneo:
+            return String(format: settings.localized("fallback.openProvider"), provider.displayName)
+        }
     }
 
     private func fallbackMessage(provider: SearchProviderID, state: ProviderSearchState) -> String {

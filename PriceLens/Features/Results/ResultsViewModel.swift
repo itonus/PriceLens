@@ -40,7 +40,10 @@ final class ResultsViewModel {
         self.sessionID = session.id
         self.identity = session.identity
         self.storePrice = session.storePrice
-        self.enabledProviders = SearchProviderID.allCases.filter { container.settings.isProviderEnabled($0) }
+        let registered = container.searchCoordinator.registeredProviderIDs
+        self.enabledProviders = SearchProviderID.allCases.filter {
+            registered.contains($0) && container.settings.isProviderEnabled($0)
+        }
     }
 
     func stop() {
