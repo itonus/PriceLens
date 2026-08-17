@@ -72,8 +72,9 @@ enum PriceParser {
 
     /// Number with optional space/dot thousands and comma/dot decimals:
     /// `1 799,00` `1.799,00` `1,799.00` `1799,-` `79,90` `399.99`
+    /// Letter boundaries prevent matching digits inside model tokens like WH-1000XM6.
     private static let numberRegex = try! NSRegularExpression(
-        pattern: #"(?<![\d.,])((?:\d{1,3}(?:[ .]\d{3})+|\d+)([,.]\d{1,2}|[,.]-)?)(?![\d.,])"#
+        pattern: #"(?<![\d.,A-Za-z])((?:\d{1,3}(?:[ .]\d{3})+|\d+)([,.]\d{1,2}|[,.]-)?)(?![\d.,A-Za-z])"#
     )
 
     static func numberMatches(in text: String) -> [NumberMatch] {

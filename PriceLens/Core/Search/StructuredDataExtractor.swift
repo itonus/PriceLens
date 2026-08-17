@@ -81,10 +81,20 @@ struct StructuredDataExtractor: Sendable {
         if let item = dict["item"] {
             result.append(contentsOf: walk(item, baseURL: baseURL))
         }
-        if let offers = dict["offers"], !(dict["@type"] as? String == "Offer") {
+        if let offers = dict["offers"], !hasProductOrOfferType(dict) {
             result.append(contentsOf: walk(offers, baseURL: baseURL))
         }
         return result
+    }
+
+    private func hasProductOrOfferType(_ dict: [String: Any]) -> Bool {
+        if let type = dict["@type"] as? String {
+            return type == "Product" || type == "Offer"
+        }
+        if let types = dict["@type"] as? [String] {
+            return types.contains("Product") || types.contains("Offer")
+        }
+        return false
     }
 
     private func parseProduct(_ dict: [String: Any], baseURL: URL) -> ExtractedProduct? {
@@ -115,6 +125,37 @@ struct StructuredDataExtractor: Sendable {
             product.price = Money(amount: priceNumber.decimalValue, currencyCode: product.priceCurrency ?? "PLN")
         }
         if let offers = dict["offers"] {
+            // Tolerantly read nested Offer data even when @type is missing.
+            let offerDicts: [[String: Any]]
+            if let single = offers as? [String: Any] {
+                offerDicts = [single]
+            } else if let many = offers as? [[String: Any]] {
+                offerDicts = many
+            } else {
+                offerDicts = []
+            }
+            if product.price == nil {
+                for offerDict in offerDicts {
+                    if let priceString = offerDict["price"] as? String,
+                       let price = parseJSONPrice(priceString, currency: offerDict["priceCurrency"] as? String) {
+                        product.price = price
+                        product.priceCurrency = offerDict["priceCurrency"] as? String
+                        if product.url == nil, let urlString = offerDict["url"] as? String {
+                            product.url = URLNormalizer.resolve(urlString, base: baseURL)
+                        }
+                        if let seller = offerDict["seller"] as? [String: Any] {
+                            product.seller = seller["name"] as? String
+                        }
+                        break
+                    }
+                    if let priceNumber = offerDict["price"] as? NSNumber {
+                        product.price = Money(amount: priceNumber.decimalValue,
+                                              currencyCode: (offerDict["priceCurrency"] as? String) ?? "PLN")
+                        product.priceCurrency = offerDict["priceCurrency"] as? String
+                        break
+                    }
+                }
+            }
             for offer in walk(offers, baseURL: baseURL) {
                 if product.price == nil, offer.price != nil {
                     product.price = offer.price

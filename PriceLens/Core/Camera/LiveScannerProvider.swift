@@ -35,8 +35,17 @@ final class LiveScannerProvider: NSObject, ScannerProvider {
         await AVCaptureDevice.requestAccess(for: .video)
     }
 
+    /// DataScannerViewController exposes no public torch API. `AVCaptureDevice.default(for:)`
+    /// can return a virtual multi-camera device on Pro models, which is a different object than
+    /// the physical wide-angle camera DataScannerViewController actually drives internally —
+    /// locking configuration on that mismatched device is what caused the previous freeze.
+    /// Targeting the same physical `.builtInWideAngleCamera` device VisionKit uses avoids that.
+    private static var torchDevice: AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+
     var isTorchAvailable: Bool {
-        AVCaptureDevice.default(for: .video)?.hasTorch ?? false
+        Self.torchDevice?.hasTorch ?? false
     }
 
     func makeDataScanner() -> DataScannerViewController {
@@ -78,13 +87,21 @@ final class LiveScannerProvider: NSObject, ScannerProvider {
     }
 
     func setTorchEnabled(_ enabled: Bool) {
-        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
-        do {
-            try device.lockForConfiguration()
-            device.torchMode = enabled ? .on : .off
-            device.unlockForConfiguration()
-        } catch {
-            Log.scanner.error("Torch toggle failed: \(error.localizedDescription)")
+        guard let device = Self.torchDevice, device.hasTorch else { return }
+        // lockForConfiguration()/unlockForConfiguration() are synchronous IPC calls to the
+        // camera daemon and can briefly block; running them on the main actor while
+        // DataScannerViewController's capture session is active froze the whole scanner UI.
+        // AVCaptureDevice's configuration APIs are documented as callable from any thread,
+        // so this cross-actor hop is safe despite AVCaptureDevice not being Sendable.
+        nonisolated(unsafe) let unsafeDevice = device
+        Task.detached(priority: .userInitiated) {
+            do {
+                try unsafeDevice.lockForConfiguration()
+                unsafeDevice.torchMode = enabled ? .on : .off
+                unsafeDevice.unlockForConfiguration()
+            } catch {
+                Log.scanner.error("Torch toggle failed: \(error.localizedDescription)")
+            }
         }
     }
 

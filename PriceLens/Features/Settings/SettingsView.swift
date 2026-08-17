@@ -10,14 +10,22 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section(settings.localized("settings.language")) {
-                    Picker(settings.localized("settings.language"), selection: languageBinding) {
-                        Text(settings.localized("settings.language.system")).tag(AppLanguage.system)
-                        Text("English").tag(AppLanguage.english)
-                        Text("Русский").tag(AppLanguage.russian)
+                    ForEach([AppLanguage.system, .english, .russian]) { language in
+                        Button {
+                            settings.language = language
+                        } label: {
+                            HStack {
+                                Text(languageTitle(language))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                if settings.language == language {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("language_\(language.rawValue)")
                     }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
-                    .accessibilityIdentifier("languagePicker")
                 }
 
                 Section(settings.localized("settings.search")) {
@@ -73,6 +81,14 @@ struct SettingsView: View {
 
     private var languageBinding: Binding<AppLanguage> {
         Binding(get: { settings.language }, set: { settings.language = $0 })
+    }
+
+    private func languageTitle(_ language: AppLanguage) -> String {
+        switch language {
+        case .system: return settings.localized("settings.language.system")
+        case .english: return "English"
+        case .russian: return "Русский"
+        }
     }
 
     private var googleBinding: Binding<Bool> {

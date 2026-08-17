@@ -7,7 +7,9 @@ struct GoogleSearchURLBuilder: Sendable {
         var components = URLComponents(string: "https://www.google.pl/search")!
         components.queryItems = [
             URLQueryItem(name: "q", value: query),
-            URLQueryItem(name: "tbm", value: "shop"),
+            // Google retired `tbm=shop`; it now 302-redirects to the `udm=28` shopping surface.
+            // Requesting it directly avoids the extra round trip and the redirect losing params.
+            URLQueryItem(name: "udm", value: "28"),
             URLQueryItem(name: "hl", value: language),
             URLQueryItem(name: "gl", value: countryCode.lowercased()),
             URLQueryItem(name: "num", value: "20")

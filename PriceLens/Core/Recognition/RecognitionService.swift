@@ -66,7 +66,16 @@ final class RecognitionService {
             // Text-only path: lock on a strong model token after stabilization.
             let result = queryBuilder.build(barcode: nil, recognizedText: texts)
             if let model = result.model {
-                let first = modelFirstSeen[model] ?? now
+                // Seed tracking from the source observations' firstSeen.
+                let firstObservation = observations
+                    .filter { obs in
+                        if case .text(let value) = obs.kind { return value.contains(model) || model.contains(value) }
+                        return false
+                    }
+                    .map(\.firstSeen)
+                    .min()
+                let tracked = modelFirstSeen[model]
+                let first = [tracked, firstObservation].compactMap { $0 }.min() ?? now
                 modelFirstSeen[model] = first
                 if now - first >= .milliseconds(Int(config.barcodeLockInterval * 2 * 1000)) {
                     let identity = ProductIdentity(barcode: nil, brand: result.brand, model: result.model,
@@ -89,9 +98,10 @@ final class RecognitionService {
                                  candidateBarcodes: barcodes.map(\.value))
         }
 
-        // Exactly one barcode: stabilize then lock.
+        // Exactly one barcode: stabilize then lock. Seeded from the observation's firstSeen.
         let target = barcodes[0]
-        let first = barcodeFirstSeen[target.value] ?? now
+        let tracked = barcodeFirstSeen[target.value]
+        let first = [tracked, target.observation.firstSeen].compactMap { $0 }.min() ?? now
         barcodeFirstSeen[target.value] = first
 
         guard now - first >= .milliseconds(Int(config.barcodeLockInterval * 1000)) else {

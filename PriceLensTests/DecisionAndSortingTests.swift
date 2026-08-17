@@ -85,7 +85,7 @@ struct OfferSortingTests {
         return Offer(id: id, provider: provider, title: id,
                      productURL: URL(string: "https://example.com/\(id)")!,
                      imageURL: nil, itemPrice: item, deliveryPrice: deliveryMoney,
-                     totalPrice: deliveryMoney.map { Money(amount: price + $0, currencyCode: "PLN") },
+                     totalPrice: deliveryMoney.map { Money(amount: price + $0.amount, currencyCode: "PLN") },
                      seller: nil, matchConfidence: confidence, extractionConfidence: 0.9)
     }
 

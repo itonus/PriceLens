@@ -37,10 +37,15 @@ struct ScannerView: View {
             cameraLayer(viewModel)
                 .ignoresSafeArea()
 
-            // Layer 2: focus guidance + recognized overlays
+            // Layer 2: focus guidance + recognized overlays.
+            // Bounds from the scanner arrive in the full-screen (safe-area-ignoring) coordinate
+            // space that the camera layer above renders in, so these must ignore the safe area
+            // too — otherwise every overlay is offset by the top/bottom safe-area inset.
             if viewModel.permissionState == .authorized {
                 focusBrackets
+                    .ignoresSafeArea()
                 overlaysLayer(viewModel)
+                    .ignoresSafeArea()
             }
 
             // Layer 3: top floating controls
@@ -60,27 +65,11 @@ struct ScannerView: View {
         // Lock transition: haptic + sheet
         .sensoryFeedback(.success, trigger: viewModel.lockTrigger)
         .sheet(item: sheetBinding(viewModel)) { session in
-            ResultSheetView(session: session)
-                .environment(container)
-                .environment(settings)
-        }
-        .onChange(of: viewModel.session == nil) { wasLocked, _ in
-            // Sheet dismissed -> rescan is triggered by the sheet's Rescan action;
-            // simple dismissal also returns to scanning.
-            if !wasLocked { /* session set */ }
-        }
-        .sheet(isPresented: $showsHistory) {
-            HistoryView(onRerun: { session in
-                showsHistory = false
-                viewModel.session = session
-            })
-            .environment(container)
-            .environment(settings)
-        }
-        .sheet(isPresented: $showsSettings) {
-            SettingsView()
-                .environment(container)
-                .environment(settings)
+            if let results = viewModel.activeResults, results.sessionID == session.id {
+                ResultSheetView(viewModel: results)
+                    .environment(container)
+                    .environment(settings)
+            }
         }
         .alert(settings.localized("scanner.manual.title"), isPresented: $vm.showsManualEntry) {
             TextField(settings.localized("scanner.manual.placeholder"), text: $manualQuery)
@@ -90,6 +79,22 @@ struct ScannerView: View {
             }
             Button(settings.localized("action.cancel"), role: .cancel) { manualQuery = "" }
         }
+        // History/Settings anchor separately so they can present over the result sheet.
+        Color.clear.frame(width: 0, height: 0)
+            .sheet(isPresented: $showsHistory) {
+                HistoryView(onRerun: { session in
+                    showsHistory = false
+                    viewModel.rerun(session: session)
+                })
+                .environment(container)
+                .environment(settings)
+            }
+        Color.clear.frame(width: 0, height: 0)
+            .sheet(isPresented: $showsSettings) {
+                SettingsView()
+                    .environment(container)
+                    .environment(settings)
+            }
     }
 
     // MARK: - Layers
@@ -179,7 +184,7 @@ struct ScannerView: View {
 
     private func topControls(_ viewModel: ScannerViewModel) -> some View {
         HStack {
-            FloatingIconButton(systemImage: "clock", label: settings.localized("history.title")) {
+            FloatingIconButton(systemImage: "clock", label: settings.localized("history.title"), identifier: "historyButton") {
                 showsHistory = true
             }
             Spacer()
@@ -190,7 +195,7 @@ struct ScannerView: View {
                     viewModel.toggleTorch()
                 }
             }
-            FloatingIconButton(systemImage: "gearshape", label: settings.localized("settings.title")) {
+            FloatingIconButton(systemImage: "gearshape", label: settings.localized("settings.title"), identifier: "settingsButton") {
                 showsSettings = true
             }
         }

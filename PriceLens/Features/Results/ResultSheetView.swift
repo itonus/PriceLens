@@ -7,39 +7,25 @@ struct ResultSheetView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
 
-    @State private var viewModel: ResultsViewModel?
+    let viewModel: ResultsViewModel
     @State private var safariURL: URL?
     @State private var isEditing = false
     @State private var editQuery: String = ""
     @State private var editPrice: String = ""
     @State private var selectedDetent: PresentationDetent = .height(340)
 
-    let session: SearchSession
-
-    init(session: SearchSession) {
-        self.session = session
+    init(viewModel: ResultsViewModel) {
+        self.viewModel = viewModel
     }
 
     var body: some View {
-        Group {
-            if let viewModel {
-                content(viewModel)
-            } else {
-                ProgressView()
-            }
-        }
+        content(viewModel)
         .presentationDetents([.height(340), .medium, .large], selection: $selectedDetent)
         .presentationDragIndicator(.visible)
         .presentationBackgroundInteraction(.enabled(upThrough: .height(340)))
         .interactiveDismissDisabled(false)
-        .onAppear {
-            if viewModel == nil {
-                let vm = ResultsViewModel(session: session, container: container)
-                viewModel = vm
-                vm.start()
-            }
-        }
-        .onDisappear { viewModel?.stop() }
+        .onAppear { viewModel.begin() }
+        .onDisappear { viewModel.stop() }
         .sheet(item: $safariURL) { url in
             SafariView(url: url)
         }
@@ -66,6 +52,7 @@ struct ResultSheetView: View {
                         dismiss()
                     }
                     .accessibilityHint(settings.localized("results.rescan.hint"))
+                    .accessibilityIdentifier("rescanButton")
                 }
             }
         }
@@ -76,13 +63,21 @@ struct ResultSheetView: View {
 
     @ViewBuilder
     private func peekContent(_ vm: ResultsViewModel) -> some View {
-        // Product identity
-        Text(vm.identity.query)
-            .font(.headline)
-            .accessibilityAddTraits(.isHeader)
-        Text(identitySubtitle(vm))
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        // Product identity — shows the confirmed product (name + image) once the barcode
+        // has been resolved, otherwise whatever the scanner derived.
+        HStack(alignment: .top, spacing: Tokens.Spacing.s) {
+            if let imageURL = vm.resolvedProduct?.imageURL {
+                OfferThumbnail(url: imageURL, size: 56)
+            }
+            VStack(alignment: .leading, spacing: Tokens.Spacing.xxs) {
+                Text(vm.resolvedProduct?.displayTitle ?? vm.identity.query)
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Text(identitySubtitle(vm))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
 
         // Provider chips
         HStack(spacing: Tokens.Spacing.xs) {
@@ -149,8 +144,10 @@ struct ResultSheetView: View {
                 .accessibilityIdentifier("editButton")
         }
 
-        // Offline / failure inline states in peek when no offers at all
-        if vm.isFinished && vm.offers.isEmpty {
+        // Offline / failure inline states in peek when no offers at all.
+        // Only while collapsed: the expanded sheet renders peek *and* expanded content, and
+        // `expandedContent` shows the same fallbacks — without this guard they appear twice.
+        if vm.isFinished, vm.offers.isEmpty, selectedDetent == .height(340) {
             fallbackArea(vm)
         }
     }

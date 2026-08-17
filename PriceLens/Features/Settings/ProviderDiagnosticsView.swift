@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if DEBUG
 /// DEBUG-only provider diagnostics: runs a live probe search and shows safe metadata
 /// (state, strategy, counts, elapsed). Never shows raw HTML. Never compiled in Release.
 struct ProviderDiagnosticsView: View {
@@ -61,3 +62,4 @@ struct ProviderDiagnosticsView: View {
         }
     }
 }
+#endif

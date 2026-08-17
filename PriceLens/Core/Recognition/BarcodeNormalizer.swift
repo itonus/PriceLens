@@ -29,9 +29,16 @@ enum BarcodeNormalizer {
             guard trimmed.count == 8, trimmed.allSatisfy(\.isNumber) else { return nil }
             return NormalizedBarcode(value: trimmed, symbology: "UPC-E", isCheckDigitValid: true)
         case "code39", "code93", "code128", "code39mod43", "codabar", "i2of5", "itf14":
-            // Alphanumeric symbologies: keep payload as scanned.
+            // Alphanumeric symbologies: keep payload as scanned. These have no check digit we
+            // can verify, so a misread on a blurry/noisy frame is accepted at face value unless
+            // we add our own sanity check. A short all-numeric payload (e.g. "278520") is far
+            // more likely to be a decode error than genuine retail data — real numeric payloads
+            // on these symbologies are almost always GTIN-length (8/12/13/14) or mixed alnum.
             let allowed = trimmed.range(of: #"^[A-Za-z0-9 .$/+%:-]+$"#, options: .regularExpression) != nil
             guard allowed else { return nil }
+            if trimmed.allSatisfy(\.isNumber), !plausibleNumericLengths.contains(trimmed.count) {
+                return nil
+            }
             return NormalizedBarcode(value: trimmed, symbology: symbology.uppercased(), isCheckDigitValid: true)
         case "qr", "qrcode":
             return NormalizedBarcode(value: raw.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -43,6 +50,9 @@ enum BarcodeNormalizer {
             return NormalizedBarcode(value: trimmed, symbology: symbology, isCheckDigitValid: true)
         }
     }
+
+    /// Standard GTIN/retail-code lengths accepted for symbologies with no verifiable check digit.
+    private static let plausibleNumericLengths: Set<Int> = [8, 12, 13, 14]
 
     private static func eanLike(_ value: String, symbology: String, length: Int) -> NormalizedBarcode? {
         guard value.count == length, value.allSatisfy(\.isNumber) else { return nil }

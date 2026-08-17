@@ -14,6 +14,8 @@
     "Tefal", "Braun", "Oral-B", "Gillette", "Nivea", "L'Oreal", "Adidas", "Nike",
     "Puma", "Lego", "Hasbro", "Mattel", "Nutella", "Milka", "Lipton", "Nescafe",
     "Dyson", "Gorenje", "Siemens", "AEG", "Miele", "Rowenta", "Krups", "DeLonghi",
-    "Motorola", "Huawei", "Realme", "Oppo", "Honor", "Garmin", "Fitbit"
+    "Motorola", "Huawei", "Realme", "Oppo", "Honor", "Garmin", "Fitbit",
+    "Xbox", "PlayStation", "Nintendo", "Microsoft", "Google", "Logitech", "Razer",
+    "Corsair", "Nvidia", "AMD", "Intel", "Anker", "Ubiquiti", "TP-Link", "Netgear"
   ]
 }

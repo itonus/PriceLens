@@ -38,6 +38,9 @@ final class ScannerViewModel {
     /// Locked session drives the result sheet.
     var session: SearchSession?
 
+    /// Active results flow for the locked session (created at lock time).
+    var activeResults: ResultsViewModel?
+
     var isTorchOn = false
     var isTorchAvailable: Bool { scanner.isTorchAvailable }
     var showsManualEntry = false
@@ -169,6 +172,46 @@ final class ScannerViewModel {
         lockTrigger += 1
         status = .locked
         self.session = session
+        activeResults = ResultsViewModel(session: session, container: container)
+        scheduleStillCaptureEnhancement()
+    }
+
+    /// Secondary accuracy path: when OCR identity is weak, capture a high-res still
+    /// and improve query/price. The photo is analyzed in memory and released.
+    private func scheduleStillCaptureEnhancement() {
+        guard !isUsingFixtures,
+              let live = liveProvider,
+              session?.identity.model == nil else { return }
+        let baseTexts = session?.identity.rawRecognizedText ?? []
+        let hasStorePrice = session?.storePrice != nil
+        Task { [weak self] in
+            guard let self else { return }
+            guard let photo = try? await live.capturePhoto() else { return }
+            let enhancement = await StillCaptureEnhancer.analyze(photo, languages: self.container.config.ocrLanguages)
+            guard !Task.isCancelled, let activeResults = self.activeResults else { return }
+            let builder = ProductQueryBuilder()
+            let rebuilt = builder.build(barcode: self.session?.identity.barcode,
+                                        recognizedText: baseTexts + enhancement.texts)
+            var enhanced = self.session?.identity
+            if !rebuilt.query.isEmpty, var copy = enhanced {
+                copy.brand = copy.brand ?? rebuilt.brand
+                copy.model = copy.model ?? rebuilt.model
+                copy.titleHint = copy.titleHint ?? rebuilt.titleHint
+                if let barcode = copy.barcode {
+                    copy.query = rebuilt.query.isEmpty ? barcode : rebuilt.query
+                } else {
+                    copy.query = rebuilt.query
+                }
+                copy.rawRecognizedText = baseTexts + enhancement.texts
+                enhanced = copy
+            }
+            let price = hasStorePrice ? nil : enhancement.prices.first
+            if let enhanced {
+                activeResults.applyEnhancement(enhanced, price: price)
+            } else if let price {
+                activeResults.updateStorePrice(price)
+            }
+        }
     }
 
     /// Tap-to-select a recognized item (ambiguity resolution or manual pick).
@@ -190,13 +233,27 @@ final class ScannerViewModel {
                                                        barcodeValue: nil, priceWasAmbiguous: false))
     }
 
-    /// Dismiss results and resume scanning.
+    /// Dismiss results and resume recognizing.
+    ///
+    /// Recognition is gated on `session == nil` in `handle(_:)`, so clearing the session here is
+    /// what re-arms scanning — the capture session itself is deliberately left running the whole
+    /// time. Tearing it down at lock time blanks the camera preview (it renders the live feed),
+    /// which left a black screen behind the result sheet.
     func rescan() {
+        activeResults?.stop()
+        activeResults = nil
         session = nil
         lockedBarcodeValue = nil
         candidateBarcodes = []
         recognition.reset()
         status = .pointAtProduct
+    }
+
+    /// Re-run a search from a history record.
+    func rerun(session: SearchSession) {
+        rescan()
+        self.session = session
+        activeResults = ResultsViewModel(session: session, container: container)
     }
 
     func toggleTorch() {

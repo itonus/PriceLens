@@ -24,3 +24,11 @@ enum FixtureScenario: String, Sendable, CaseIterable {
     case providerFailure
     case offline
 }
+
+/// Root-level routes presented above the scanner (and above the result sheet).
+enum AppRoute: String, Identifiable {
+    case history
+    case settings
+
+    var id: String { rawValue }
+}

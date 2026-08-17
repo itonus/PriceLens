@@ -23,7 +23,7 @@ struct ProductQueryBuilder: Sendable {
             .filter { !$0.isEmpty }
 
         let brand = detectBrand(in: lines)
-        let model = detectModelToken(in: lines)
+        let model = detectModelToken(in: lines, barcode: barcode)
 
         var query = ""
         var titleHint: String? = nil
@@ -32,14 +32,17 @@ struct ProductQueryBuilder: Sendable {
             query = "\(brand) \(model)"
         } else if let model {
             query = model
+        } else if let brand {
+            query = brand
         } else {
+            // Falls back to a descriptive OCR phrase (e.g. "XBOX SERIES X 1TB"). Shipping/label
+            // lines (lot/date/work-order/serial codes) are excluded by `isNoiseLabelLine`, so
+            // this is safe to use even when a barcode is already present — it only enriches the
+            // display title/secondary query candidate; the barcode itself always stays the
+            // primary search key (see ProductIdentity.queryCandidates).
             let hint = informativePhrase(from: lines)
             titleHint = hint
             query = hint ?? ""
-        }
-
-        if let brand, model == nil, !query.lowercased().contains(brand.lowercased()) {
-            query = "\(brand) \(query)".trimmingCharacters(in: .whitespaces)
         }
 
         return Result(brand: brand, model: model, titleHint: titleHint, query: query)
@@ -49,12 +52,15 @@ struct ProductQueryBuilder: Sendable {
 
     func detectBrand(in lines: [String]) -> String? {
         for line in lines {
-            let lineTokens = TextNormalizer.tokens(line)
+            let lineTokens = Set(TextNormalizer.tokens(line))
             for hint in lexicon.brandHints {
                 let hintTokens = TextNormalizer.tokens(hint)
-                if !hintTokens.isEmpty, lineTokens.contains(hintTokens[0]) {
-                    return hint
-                }
+                guard !hintTokens.isEmpty else { continue }
+                // Require every token of the hint to appear, not just the first: brands like
+                // "L'Oreal" or "Oral-B" fold to ["l","oreal"]/["oral","b"], and matching only
+                // the first token means a single stray "l" from OCR noise falsely matches.
+                guard hintTokens.allSatisfy({ lineTokens.contains($0) }) else { continue }
+                return hint
             }
         }
         return nil
@@ -64,23 +70,25 @@ struct ProductQueryBuilder: Sendable {
 
     /// Strong model tokens: mixed letters/digits, hyphens, uppercase, unusual length.
     /// Examples: WH-1000XM6, SM-S938B, MX2D3, 42171, GSR 18V-45.
-    func detectModelToken(in lines: [String]) -> String? {
+    func detectModelToken(in lines: [String], barcode: String? = nil) -> String? {
         var best: (token: String, score: Int)? = nil
         for line in lines {
+            guard !isNoiseLabelLine(line) else { continue }
             let rawTokens = line.split(whereSeparator: { $0.isWhitespace }).map(String.init)
             for raw in rawTokens {
                 let token = raw.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:()[]{}\"'"))
-                guard let score = modelScore(token), score > 0 else { continue }
+                guard let score = modelScore(token, barcode: barcode), score > 0 else { continue }
                 if best == nil || score > best!.score {
                     best = (token, score)
                 }
             }
-            // Two-token models like "GSR 18V-45"
+            // Two-token models like "GSR 18V-45" (skip when the first token is a known brand).
             for (a, b) in zip(rawTokens, rawTokens.dropFirst()) {
                 let ta = a.trimmingCharacters(in: .punctuationCharacters)
                 let tb = b.trimmingCharacters(in: .punctuationCharacters)
-                guard ta.allSatisfy({ $0.isLetter }), ta.count <= 4, ta == ta.uppercased(),
-                      let sb = modelScore(tb), sb > 0 else { continue }
+                guard ta.allSatisfy({ $0.isLetter }), (2...4).contains(ta.count), ta == ta.uppercased(),
+                      !isBrandToken(ta),
+                      let sb = modelScore(tb, barcode: barcode), sb > 0 else { continue }
                 let combined = "\(ta) \(tb)"
                 let score = sb + 2
                 if best == nil || score > best!.score {
@@ -91,16 +99,45 @@ struct ProductQueryBuilder: Sendable {
         return best?.token
     }
 
+    /// Shipping/compliance label lines ("LOT NO/DATE: 2316X", "MODEL NO:1882", "WO 23477096",
+    /// "TEAM: PSUZ", "SN 053408231617", "MADE IN CHINA") carry logistics metadata, not product
+    /// identity — their alphanumeric codes otherwise look exactly like a plausible model number
+    /// to `modelScore`. Skip the whole line rather than try to filter individual tokens.
+    private static let noiseLineStarters: Set<String> = [
+        "lot", "date", "wo", "team", "sn", "serial", "sku", "batch", "mfg",
+        "made", "distribution", "ref", "qty", "exp", "part", "pn", "model"
+    ]
+
+    private func isNoiseLabelLine(_ line: String) -> Bool {
+        guard let first = TextNormalizer.tokens(line).first else { return false }
+        return Self.noiseLineStarters.contains(first)
+    }
+
+    private func isBrandToken(_ token: String) -> Bool {
+        let folded = TextNormalizer.normalizeForMatching(token)
+        return lexicon.brandHints.contains { TextNormalizer.normalizeForMatching($0) == folded }
+    }
+
     /// Returns nil when the token is definitely not a model; score otherwise (higher = stronger).
-    private func modelScore(_ token: String) -> Int? {
-        guard token.count >= 4, token.count <= 18 else { return nil }
+    private func modelScore(_ token: String, barcode: String? = nil) -> Int? {
+        // Real consumer model numbers are short (WH-1000XM6 = 10, SM-S938B = 8). Longer mixed
+        // alphanumeric runs are serial/lot codes printed under the barcode ("JFA25-07/23L043447")
+        // — they score high on every "looks like a model" signal, so bound the length instead.
+        guard token.count >= 4, token.count <= 12 else { return nil }
+        // Slashes appear in serials and locale lists ("EN/FR/ES"), never in model numbers.
+        guard !token.contains("/") else { return nil }
         guard token.contains(where: { $0.isNumber }) else { return nil }
 
         let lower = token.lowercased()
         if lexicon.stopwords.contains(lower) { return nil }
         if PriceParser.parse(token) != nil { return nil }              // prices are not models
         if token.allSatisfy({ $0.isNumber }) {
-            // Pure digits: only plausible for 4-6 digit model/article numbers.
+            // Pure digits are a weak signal (article/lot/date numbers all look like this) and
+            // only plausible as a model when nothing more reliable exists. When a barcode was
+            // already recognized, it is a far stronger identity than any bare digit string OCR
+            // might pick up from the packaging (barcode's own printed digits, dates, lot codes,
+            // weights) — never let one override or masquerade as the model/query in that case.
+            guard barcode == nil else { return nil }
             guard (4...6).contains(token.count) else { return nil }
             return 1
         }
@@ -120,6 +157,7 @@ struct ProductQueryBuilder: Sendable {
     func informativePhrase(from lines: [String]) -> String? {
         var candidates: [String] = []
         for line in lines {
+            guard !isNoiseLabelLine(line) else { continue }
             let rawTokens = line.split(whereSeparator: { $0.isWhitespace }).map(String.init)
             let kept = rawTokens.filter { token in
                 let clean = token.trimmingCharacters(in: .punctuationCharacters)
@@ -127,7 +165,11 @@ struct ProductQueryBuilder: Sendable {
                 let folded = TextNormalizer.normalizeForMatching(clean)
                 if lexicon.stopwords.contains(folded) { return false }
                 if PriceParser.parse(clean) != nil { return false }
-                if clean.allSatisfy({ $0.isNumber }) { return false }
+                // Dates/lot codes ("01.2027", "25-12-26") and pure numbers carry no product
+                // information: reject any token that has digits but no letters at all.
+                if clean.contains(where: { $0.isNumber }), !clean.contains(where: { $0.isLetter }) {
+                    return false
+                }
                 return true
             }
             guard !kept.isEmpty else { continue }

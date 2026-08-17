@@ -16,6 +16,8 @@ final class SearchCoordinator {
     private let cache: SearchCache
     private let matcher: OfferMatcher
     private var providers: [SearchProviderID: any SearchProvider]
+    /// Optional SwiftData-backed cache (6h). Checked after memory, before network.
+    var persistedCache: PersistedSearchCache?
 
     private var currentTask: Task<Void, Never>?
     private var currentSessionID: UUID?
@@ -23,11 +25,13 @@ final class SearchCoordinator {
     init(config: AppConfig = .default,
          providers: [any SearchProvider],
          cache: SearchCache = SearchCache(),
-         matcher: OfferMatcher = OfferMatcher()) {
+         matcher: OfferMatcher = OfferMatcher(),
+         persistedCache: PersistedSearchCache? = nil) {
         self.config = config
         self.cache = cache
         self.matcher = matcher
         self.providers = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
+        self.persistedCache = persistedCache
     }
 
     func replaceProviders(_ providers: [any SearchProvider]) {
@@ -101,6 +105,11 @@ final class SearchCoordinator {
                 emit(result: cached, identity: identity, sessionID: sessionID, continuation: continuation)
                 return
             }
+            if let persisted = persistedCache?.cachedResult(provider: provider.id, key: cacheKey) {
+                await cache.store(persisted, for: cacheKey)
+                emit(result: persisted, identity: identity, sessionID: sessionID, continuation: continuation)
+                return
+            }
 
             let request = ProductSearchRequest(
                 identity: identity,
@@ -115,6 +124,7 @@ final class SearchCoordinator {
 
             if !result.offers.isEmpty {
                 await cache.store(result, for: cacheKey)
+                persistedCache?.store(result, key: cacheKey)
                 emit(result: result, identity: identity, sessionID: sessionID, continuation: continuation)
                 return
             }

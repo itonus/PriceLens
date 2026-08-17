@@ -40,6 +40,6 @@ enum PageClassifier {
             return .consent
         }
 
-        return html.count > 2_000 ? .content : .unknown
+        return html.count > 400 ? .content : .unknown
     }
 }

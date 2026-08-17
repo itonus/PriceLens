@@ -5,6 +5,7 @@ struct FloatingIconButton: View {
     let systemImage: String
     let label: String
     var isActive: Bool = false
+    var identifier: String?
     let action: () -> Void
 
     var body: some View {
@@ -19,5 +20,18 @@ struct FloatingIconButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
+        .modifier(OptionalAccessibilityIdentifier(identifier: identifier))
+    }
+}
+
+private struct OptionalAccessibilityIdentifier: ViewModifier {
+    let identifier: String?
+
+    func body(content: Content) -> some View {
+        if let identifier {
+            content.accessibilityIdentifier(identifier)
+        } else {
+            content
+        }
     }
 }

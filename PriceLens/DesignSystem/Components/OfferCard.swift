@@ -16,6 +16,18 @@ struct OfferCard: View {
     }
 
     var body: some View {
+        HStack(alignment: .top, spacing: Tokens.Spacing.s) {
+            if let imageURL = offer.imageURL {
+                OfferThumbnail(url: imageURL)
+            }
+            details
+        }
+        .padding(Tokens.Spacing.s)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: Tokens.Corner.card))
+        .accessibilityElement(children: .contain)
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: Tokens.Spacing.xs) {
             HStack {
                 Text(offer.provider.displayName)
@@ -61,9 +73,6 @@ struct OfferCard: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(Tokens.Spacing.s)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: Tokens.Corner.card))
-        .accessibilityElement(children: .contain)
     }
 
     private func totalText(_ total: Money) -> String {

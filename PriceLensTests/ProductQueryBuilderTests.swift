@@ -59,4 +59,51 @@ struct ProductQueryBuilderTests {
         #expect(result.model == "42171")
         #expect(result.query == "Lego 42171")
     }
+
+    /// Regression: the printed human-readable digits under a barcode (OCR'd as plain text)
+    /// must never be picked up as a fake "model number" that hijacks the query/title.
+    @Test func barcodeDigitFragmentNotTreatedAsModel() {
+        let result = builder.build(barcode: "5996379357362", recognizedText: ["599637", "935736 2"])
+        #expect(result.model == nil)
+        #expect(result.query != "599637")
+    }
+
+    /// Regression: "L'Oreal" folds to tokens ["l","oreal"]; matching only the first token meant
+    /// any line containing a stray lone "l" (common OCR noise) falsely detected as L'Oreal.
+    @Test func strayLetterDoesNotFalselyMatchApostropheBrand() {
+        let result = builder.build(barcode: nil, recognizedText: ["01.2027", "KE 25F"])
+        #expect(result.brand == nil)
+    }
+
+    /// Regression: manufacture/expiry dates and lot codes ("01.2027") are not product info
+    /// and must not leak into the query as if they were part of the title.
+    @Test func dateLikeTokenExcludedFromQuery() {
+        let result = builder.build(barcode: nil, recognizedText: ["01.2027", "Snack Chips"])
+        #expect(!result.query.contains("01.2027"))
+    }
+
+    /// Regression: any weak pure-digit OCR fragment (not just barcode substrings — misreads,
+    /// weights, lot numbers) must never become the model/query once a barcode already anchors
+    /// identity. The barcode itself is a stronger, more honest fallback than a guessed number.
+    @Test func weakDigitFragmentNeverOverridesBarcodeIdentity() {
+        let result = builder.build(barcode: "4014400907278", recognizedText: ["1414", "KE 25F"])
+        #expect(result.model == nil)
+        #expect(result.query != "1414")
+    }
+
+    /// Regression: shipping-label lines ("LOT NO/DATE:2316X", "MODEL NO:1882", "WO 23477096",
+    /// "TEAM: PSUZ") must not be mistaken for the product name/model — their alphanumeric codes
+    /// otherwise look exactly like a plausible model number. The real descriptive line
+    /// ("XBOX SERIES X 1TB...") should be used instead.
+    @Test func shippingLabelLinesExcludedFromIdentity() {
+        let result = builder.build(barcode: "889842640724", recognizedText: [
+            "TEAM: PSUZ", "LOT NO/DATE:2316X", "WO 23477096", "MODEL NO:1882",
+            "XBOX SERIES X 1TB EN/FR/ES US/CA SX", "Made in China"
+        ])
+        #expect(result.brand == "Xbox")
+        #expect(result.model != "2316X")
+        #expect(!result.query.contains("2316X"))
+        #expect(!result.query.contains("23477096"))
+        #expect(!result.query.contains("1882"))
+    }
 }

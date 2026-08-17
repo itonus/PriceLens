@@ -6,6 +6,7 @@ enum Tokens {
         static let control: CGFloat = 22
         static let card: CGFloat = 16
         static let chip: CGFloat = 10
+        static let thumbnail: CGFloat = 10
     }
 
     enum Spacing {

@@ -47,6 +47,17 @@ struct BarcodeNormalizerTests {
         #expect(result?.value == "ABC123xyz")
     }
 
+    /// Regression: symbologies with no verifiable check digit (Code128 etc.) must reject a
+    /// short all-numeric misread instead of accepting it as a valid barcode at face value —
+    /// on a blurry frame VisionKit can decode noise as a plausible-looking short digit string.
+    @Test func code128ShortNumericMisreadRejected() {
+        #expect(BarcodeNormalizer.normalize("278520", symbology: "Code128") == nil)
+    }
+
+    @Test func code128GTINLengthNumericAccepted() {
+        #expect(BarcodeNormalizer.normalize("401440090727", symbology: "Code128") != nil)
+    }
+
     @Test func checkDigitAlgorithm() {
         #expect(BarcodeNormalizer.isValidGTINCheckDigit("5901234123457"))
         #expect(BarcodeNormalizer.isValidGTINCheckDigit("012345678905")) // UPC-A

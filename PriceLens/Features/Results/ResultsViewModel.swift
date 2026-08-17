@@ -19,6 +19,8 @@ final class ResultsViewModel {
 
     var identity: ProductIdentity
     var storePrice: Money?
+    /// Real product behind the barcode, once resolved. Drives the header title/image.
+    var resolvedProduct: ResolvedProduct?
     var offers: [Offer] = []
     var providerStatus: [SearchProviderID: ProviderStatus] = [:]
     var sortOrder: OfferSortOrder = .bestMatch
@@ -31,6 +33,7 @@ final class ResultsViewModel {
     let enabledProviders: [SearchProviderID]
 
     private var searchTask: Task<Void, Never>?
+    private var resolveTask: Task<Void, Never>?
 
     init(session: SearchSession, container: AppContainer) {
         self.container = container
@@ -43,7 +46,31 @@ final class ResultsViewModel {
     func stop() {
         searchTask?.cancel()
         searchTask = nil
+        resolveTask?.cancel()
+        resolveTask = nil
         container.searchCoordinator.cancelCurrent()
+    }
+
+    /// Resolves what the barcode actually is, then re-runs the search with the real product
+    /// name. OCR text from packaging is unreliable (serials, lot codes, shipping labels), so a
+    /// confirmed product name is a far better query — but only when lookup genuinely succeeds.
+    private func resolveProductIfPossible() {
+        resolveTask?.cancel()
+        guard let resolver = container.productResolver,
+              let barcode = identity.barcode, !barcode.isEmpty else { return }
+
+        resolveTask = Task { [weak self] in
+            guard let self, let resolved = await resolver.resolve(barcode: barcode) else { return }
+            guard !Task.isCancelled, let title = resolved.displayTitle else { return }
+            self.resolvedProduct = resolved
+
+            // Adopt the confirmed identity and search again with it.
+            guard title.caseInsensitiveCompare(self.identity.query) != .orderedSame else { return }
+            self.identity.brand = resolved.brand ?? self.identity.brand
+            self.identity.titleHint = title
+            self.identity.query = title
+            self.start()
+        }
     }
 
     // MARK: - Search lifecycle
@@ -65,6 +92,15 @@ final class ResultsViewModel {
                 self.handle(event)
             }
         }
+    }
+
+    /// Entry point for a freshly presented sheet: search immediately with what the scanner saw,
+    /// and resolve the barcode in parallel so results improve as soon as the real product is
+    /// known. Kept separate from `start()` so the re-search triggered by a successful resolve
+    /// cannot cancel the resolve task that is driving it.
+    func begin() {
+        start()
+        resolveProductIfPossible()
     }
 
     func retry() {
@@ -124,6 +160,23 @@ final class ResultsViewModel {
 
     private func recomputeDecision() {
         decision = decisionEngine.decision(storePrice: storePrice, offers: offers)
+    }
+
+    /// Merges a better identity (from the high-res still path) into the active session.
+    func applyEnhancement(_ enhanced: ProductIdentity, price: Money?) {
+        var identityChanged = false
+        if enhanced.query != identity.query || enhanced.model != identity.model {
+            identity = enhanced
+            identityChanged = true
+        }
+        if storePrice == nil, let price {
+            storePrice = price
+        }
+        if identityChanged {
+            start()
+        } else {
+            recomputeDecision()
+        }
     }
 
     // MARK: - History
