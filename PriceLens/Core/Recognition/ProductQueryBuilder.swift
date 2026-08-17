@@ -34,12 +34,13 @@ struct ProductQueryBuilder: Sendable {
             query = model
         } else if let brand {
             query = brand
-        } else {
-            // Falls back to a descriptive OCR phrase (e.g. "XBOX SERIES X 1TB"). Shipping/label
-            // lines (lot/date/work-order/serial codes) are excluded by `isNoiseLabelLine`, so
-            // this is safe to use even when a barcode is already present — it only enriches the
-            // display title/secondary query candidate; the barcode itself always stays the
-            // primary search key (see ProductIdentity.queryCandidates).
+        } else if barcode == nil {
+            // Free-text OCR is only trustworthy when there is no barcode to identify the product.
+            // Packaging is covered in text that is not the product name — consumer-service
+            // headings, expiry notices, addresses, certifications — in several languages at once,
+            // and any blocklist will keep losing to the next unseen phrase. A scanned barcode is
+            // an exact identifier, so it is used verbatim and OCR contributes nothing but a
+            // brand/model when one is genuinely recognizable.
             let hint = informativePhrase(from: lines)
             titleHint = hint
             query = hint ?? ""

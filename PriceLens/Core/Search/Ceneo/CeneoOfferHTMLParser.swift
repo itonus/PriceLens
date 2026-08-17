@@ -34,22 +34,34 @@ struct CeneoOfferHTMLParser: Sendable {
 
     // MARK: - Strategy 1: product rows
 
-    /// Each result is a `.cat-prod-row` carrying `data-productminprice`, `data-productName`,
-    /// `data-brand` and `data-pid`, plus a thumbnail `<img>`.
+    /// Ceneo renders results with at least two different layouts — `cat-prod-row` for
+    /// name searches and `js_product-row` for barcode/shop searches — which also disagree on
+    /// attribute names (`data-productName` vs `data-GAProductName`) and casing (`data-brand` vs
+    /// `data-Brand`). Selecting on the `data-productminprice` attribute instead of a class, and
+    /// accepting several spellings per field, keeps one code path working across both.
     private func productRowStrategy(html: String) throws -> [OfferCandidate] {
         let document = try SwiftSoup.parse(html)
-        let rows = try document.select("div.cat-prod-row[data-productminprice]")
+        let rows = try document.select("[data-productminprice]")
 
         return try rows.compactMap { row -> OfferCandidate? in
-            let priceText = try row.attr("data-productminprice")
-            let name = try row.attr("data-productName").trimmingCharacters(in: .whitespacesAndNewlines)
-            let productID = try row.attr("data-pid").trimmingCharacters(in: .whitespacesAndNewlines)
+            let priceText = attribute(row, "data-productminprice", "data-price") ?? ""
+            let productID = attribute(row, "data-pid", "data-productid") ?? ""
+
+            // `data-GAProductName` is prefixed with the product id ("135917470/Regina …").
+            var name = attribute(row, "data-productname", "data-product-name") ?? ""
+            if name.isEmpty, let ga = attribute(row, "data-gaproductname") {
+                name = ga.contains("/") ? String(ga.drop(while: { $0 != "/" }).dropFirst()) : ga
+            }
+            // Last resort: the thumbnail's alt text carries the product name.
+            if name.isEmpty, let alt = try? row.select("img[alt]").first()?.attr("alt") {
+                name = alt.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
 
             guard !name.isEmpty, !productID.isEmpty,
                   let price = decimalPrice(priceText),
                   let url = URL(string: "https://www.ceneo.pl/\(productID)") else { return nil }
 
-            let brand = try? row.attr("data-brand").trimmingCharacters(in: .whitespacesAndNewlines)
+            let brand = attribute(row, "data-brand")
 
             // Thumbnails are protocol-relative ("//image.ceneostatic.pl/...").
             var imageURL: URL? = nil
@@ -96,6 +108,20 @@ struct CeneoOfferHTMLParser: Sendable {
                                         extractionStrategy: "json-ld")
             )
         }
+    }
+
+    /// First non-empty value among the given attribute names, matched case-insensitively —
+    /// Ceneo mixes `data-brand` and `data-Brand` across layouts.
+    private func attribute(_ element: Element, _ names: String...) -> String? {
+        let attributes = element.getAttributes()
+        for name in names {
+            let wanted = name.lowercased()
+            for attribute in attributes?.asList() ?? [] where attribute.getKey().lowercased() == wanted {
+                let value = attribute.getValue().trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty { return value }
+            }
+        }
+        return nil
     }
 
     /// Ceneo writes prices as plain dot-decimal attributes ("664.99"), independent of locale.

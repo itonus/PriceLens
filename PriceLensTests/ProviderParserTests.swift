@@ -148,6 +148,22 @@ struct CeneoParserTests {
         #expect(first?.parsedDeliveryPrice == nil)
     }
 
+    /// Regression: Ceneo serves a different layout for barcode/shop searches — class
+    /// `js_product-row` instead of `cat-prod-row`, and `data-GAProductName` (id-prefixed) /
+    /// `data-Brand` instead of `data-productName` / `data-brand`. A class-based selector
+    /// silently returned zero offers for every barcode scan.
+    @Test func barcodeShopRowLayoutIsParsed() {
+        let (offers, diagnostics) = parser.parse(html: fixture("ceneo_barcode_shop_row"), baseURL: base)
+        #expect(diagnostics.strategyUsed == "product-row")
+        #expect(offers.count == 1)
+        let offer = offers.first
+        #expect(offer?.title == "Regina Delicatis Chusteczki Higieniczne 96 Sztuk")
+        #expect(offer?.parsedItemPrice == Money(amount: 8.72, currencyCode: "PLN"))
+        #expect(offer?.url.absoluteString == "https://www.ceneo.pl/135917470")
+        #expect(offer?.evidence.brand == "Regina")
+        #expect(offer?.imageURL?.scheme == "https")
+    }
+
     @Test func noResultsFixtureYieldsEmpty() {
         let (offers, _) = parser.parse(html: fixture("ceneo_no_results"), baseURL: base)
         #expect(offers.isEmpty)
