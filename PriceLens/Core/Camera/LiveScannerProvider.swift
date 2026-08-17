@@ -35,18 +35,10 @@ final class LiveScannerProvider: NSObject, ScannerProvider {
         await AVCaptureDevice.requestAccess(for: .video)
     }
 
-    /// DataScannerViewController exposes no public torch API. `AVCaptureDevice.default(for:)`
-    /// can return a virtual multi-camera device on Pro models, which is a different object than
-    /// the physical wide-angle camera DataScannerViewController actually drives internally —
-    /// locking configuration on that mismatched device is what caused the previous freeze.
-    /// Targeting the same physical `.builtInWideAngleCamera` device VisionKit uses avoids that.
-    private static var torchDevice: AVCaptureDevice? {
-        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
-    }
-
-    var isTorchAvailable: Bool {
-        Self.torchDevice?.hasTorch ?? false
-    }
+    /// Always false: see `setTorchEnabled(_:)` for why the torch cannot be driven while
+    /// DataScannerViewController owns the capture device. The scanner chrome hides the control
+    /// when this is false, so no broken button is shown.
+    var isTorchAvailable: Bool { false }
 
     func makeDataScanner() -> DataScannerViewController {
         if let existing = dataScanner { return existing }
@@ -86,24 +78,22 @@ final class LiveScannerProvider: NSObject, ScannerProvider {
         seenItems.removeAll()
     }
 
-    func setTorchEnabled(_ enabled: Bool) {
-        guard let device = Self.torchDevice, device.hasTorch else { return }
-        // lockForConfiguration()/unlockForConfiguration() are synchronous IPC calls to the
-        // camera daemon and can briefly block; running them on the main actor while
-        // DataScannerViewController's capture session is active froze the whole scanner UI.
-        // AVCaptureDevice's configuration APIs are documented as callable from any thread,
-        // so this cross-actor hop is safe despite AVCaptureDevice not being Sendable.
-        nonisolated(unsafe) let unsafeDevice = device
-        Task.detached(priority: .userInitiated) {
-            do {
-                try unsafeDevice.lockForConfiguration()
-                unsafeDevice.torchMode = enabled ? .on : .off
-                unsafeDevice.unlockForConfiguration()
-            } catch {
-                Log.scanner.error("Torch toggle failed: \(error.localizedDescription)")
-            }
-        }
-    }
+    /// Intentionally a no-op: the torch cannot be controlled alongside this scanner.
+    ///
+    /// `DataScannerViewController` exposes no torch API (verified against the framework
+    /// interface — it offers zoom, regionOfInterest and isScanning, and nothing else) and owns
+    /// its capture session privately. Driving `AVCaptureDevice.torchMode` from outside stalls
+    /// its frame delivery: the preview freezes while the torch is lit and recovers when it is
+    /// turned off. Three approaches were tried on-device and all reproduce the freeze —
+    /// configuring off the main actor, targeting the physical wide-angle device rather than the
+    /// virtual multi-camera, and stopping/restarting scanning around the change. The conflict is
+    /// device ownership itself, so no caller-side workaround exists.
+    ///
+    /// Owning an `AVCaptureSession` directly (with Vision for recognition) would restore torch
+    /// control. Until then the control is hidden via `isTorchAvailable` rather than shipping a
+    /// button that reliably breaks the camera; the system flashlight in Control Center works,
+    /// because iOS lights it outside this session.
+    func setTorchEnabled(_ enabled: Bool) {}
 
     func capturePhoto() async throws -> UIImage {
         guard let scanner = dataScanner else { throw ScannerError.unavailable }

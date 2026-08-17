@@ -152,4 +152,48 @@ struct ProductQueryBuilderTests {
         #expect(result.model == nil)
         #expect(result.query.isEmpty, "No real product text present — must not invent a title")
     }
+
+    /// A UPC-A pack is normalized to EAN-13 with a leading zero, but shops index whichever form
+    /// is printed. Both must be searched or such products are never found.
+    @Test func upcaBarcodeAlsoSearchedWithoutLeadingZero() {
+        let identity = ProductIdentity(barcode: "0889842640724", brand: nil, model: nil,
+                                       titleHint: nil, rawRecognizedText: [],
+                                       query: "0889842640724")
+        #expect(identity.queryCandidates.contains("0889842640724"))
+        #expect(identity.queryCandidates.contains("889842640724"))
+    }
+
+    /// A native EAN-13 that merely starts with 0 must not be truncated into a bogus 12-digit code
+    /// unless it really is a zero-padded UPC-A — same rule, but verify we do not lose the original.
+    @Test func ean13KeepsOriginalFormFirst() {
+        let identity = ProductIdentity(barcode: "0123456789012", brand: nil, model: nil,
+                                       titleHint: nil, rawRecognizedText: [],
+                                       query: "0123456789012")
+        #expect(identity.queryCandidates.first == "0123456789012")
+    }
+
+    /// A product database returns the manufacturer-language name ("Haribo - Primavera
+    /// Erdbeeren"), which a local retailer may not list verbatim. After the exact forms miss,
+    /// a shortened phrase ("Haribo Primavera") is tried — verified to be the difference between
+    /// zero and three offers on Ceneo.
+    @Test func relaxedPhraseAppendedAfterExactForms() {
+        let identity = ProductIdentity(barcode: "4001686405093", brand: "Haribo", model: nil,
+                                       titleHint: "Haribo - Primavera Erdbeeren",
+                                       rawRecognizedText: [],
+                                       query: "Haribo - Primavera Erdbeeren")
+        let candidates = identity.queryCandidates
+        #expect(candidates.first == "4001686405093", "Barcode stays the primary key")
+        #expect(candidates.contains("Haribo Primavera"))
+        // The relaxed form must come after the exact ones, never replace them.
+        let exact = candidates.firstIndex(of: "Haribo - Primavera Erdbeeren")
+        let relaxed = candidates.firstIndex(of: "Haribo Primavera")
+        #expect(exact != nil && relaxed != nil && exact! < relaxed!)
+    }
+
+    /// Short queries are already as broad as they can be: no relaxed duplicate.
+    @Test func shortQueryIsNotRelaxed() {
+        let identity = ProductIdentity(barcode: nil, brand: nil, model: nil, titleHint: nil,
+                                       rawRecognizedText: [], query: "Lego 42171")
+        #expect(identity.queryCandidates == ["Lego 42171"])
+    }
 }

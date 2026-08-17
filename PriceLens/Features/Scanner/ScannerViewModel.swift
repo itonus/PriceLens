@@ -138,13 +138,31 @@ final class ScannerViewModel {
         switch event {
         case .observations(let newObservations):
             observations = newObservations
-            guard session == nil else { return } // locked: freeze processing until rescan
             let result = recognition.process(newObservations)
             candidateBarcodes = result.candidateBarcodes
-            if let lock = result.lock {
+
+            guard session != nil else {
+                if let lock = result.lock {
+                    lockCandidate(lock)
+                } else {
+                    status = mapStatus(result.status)
+                }
+                return
+            }
+
+            // Already showing a product: move to a new one only on strong evidence, so results
+            // do not flicker between items while the camera drifts across a shelf.
+            //
+            // `result.lock` is nil whenever several barcodes compete (that case waits for a tap),
+            // and it only appears after the stabilization interval — so reaching here means one
+            // barcode has been held steady. Additionally requiring the current product to have
+            // left the frame prevents ping-ponging while both are visible.
+            if let lock = result.lock,
+               let newBarcode = lock.barcodeValue,
+               newBarcode != lockedBarcodeValue,
+               let previous = lockedBarcodeValue,
+               !visibleBarcodeValues(in: newObservations).contains(previous) {
                 lockCandidate(lock)
-            } else {
-                status = mapStatus(result.status)
             }
         case .availabilityChanged(let available):
             if !available { permissionState = .unsupported }
@@ -163,6 +181,10 @@ final class ScannerViewModel {
     // MARK: - Locking
 
     private func lockCandidate(_ candidate: RecognitionService.ScanCandidate) {
+        // Switching products: cancel the previous search so its late results cannot land on the
+        // new one.
+        activeResults?.stop()
+
         let session = SearchSession(identity: candidate.identity,
                                     storePrice: candidate.storePrice,
                                     activeQuery: candidate.identity.query.isEmpty
@@ -215,11 +237,26 @@ final class ScannerViewModel {
     }
 
     /// Tap-to-select a recognized item (ambiguity resolution or manual pick).
+    ///
+    /// Works while a product is already shown too: with several barcodes in frame the app
+    /// deliberately waits rather than guessing, so tapping is how the user picks — and how they
+    /// correct a wrong pick without having to rescan first.
     func select(observation: ScannerObservation) {
-        guard session == nil else { return }
+        if case .barcode(let value, let symbology) = observation.kind,
+           let normalized = BarcodeNormalizer.normalize(value, symbology: symbology),
+           normalized.value == lockedBarcodeValue {
+            return // already showing this one
+        }
         if let candidate = recognition.lock(observation: observation, in: observations) {
             lockCandidate(candidate)
         }
+    }
+
+    private func visibleBarcodeValues(in observations: [ScannerObservation]) -> Set<String> {
+        Set(observations.compactMap { observation in
+            guard case .barcode(let value, let symbology) = observation.kind else { return nil }
+            return BarcodeNormalizer.normalize(value, symbology: symbology)?.value
+        })
     }
 
     /// Manual text search ("Type instead").
