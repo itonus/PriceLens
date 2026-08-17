@@ -177,3 +177,40 @@ struct CeneoURLTests {
                 == "https://www.ceneo.pl/szukaj-haribo+wummis")
     }
 }
+
+@Suite("CeneoWebSearchProvider")
+struct CeneoProviderTests {
+    let request = ProductSearchRequest(
+        identity: ProductIdentity(barcode: "8004260487900", brand: nil, model: nil,
+                                  titleHint: nil, rawRecognizedText: [], query: "8004260487900"),
+        query: "8004260487900", countryCode: "PL", currencyCode: "PLN", preferredLanguage: "pl")
+
+    /// Regression: Ceneo embeds a reCAPTCHA *branding* footer on ordinary result pages, so
+    /// marker-based classification reported a challenge and discarded real offers. Parsed
+    /// offers are direct evidence of content and must win over the heuristic.
+    @Test func recaptchaBrandingDoesNotDiscardRealOffers() async {
+        let html = fixture("ceneo_success")
+            + "<div class=\"grecaptcha-branding\">Ta strona jest chroniona przez reCAPTCHA</div>"
+        let provider = CeneoWebSearchProvider(loader: { _ in (html, 200) })
+        let result = await provider.search(request)
+        #expect(result.state == .success)
+        #expect(result.offers.count == 2)
+    }
+
+    /// A genuine block must still be reported when nothing could be parsed.
+    @Test func genuineChallengeWithNoOffersIsBlocked() async {
+        let provider = CeneoWebSearchProvider(loader: { _ in
+            (String(repeating: "<p>Please enable JS and disable any ad blocker</p>", count: 20), 200)
+        })
+        let result = await provider.search(request)
+        #expect(result.state == .blocked)
+        #expect(result.offers.isEmpty)
+    }
+
+    @Test func offlineIsReportedNotFabricated() async {
+        let provider = CeneoWebSearchProvider(loader: { _ in throw HTTPError.offline })
+        let result = await provider.search(request)
+        #expect(result.state == .offline)
+        #expect(result.offers.isEmpty)
+    }
+}

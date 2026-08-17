@@ -40,6 +40,18 @@ struct CeneoWebSearchProvider: SearchProvider {
 
         do {
             let (html, status) = try await loader(searchURL)
+
+            // Parse before classifying. Ceneo embeds a reCAPTCHA *branding* footer ("Ta strona
+            // jest chroniona przez reCAPTCHA") on ordinary result pages, which makes marker-based
+            // classification report a challenge on a page that is plainly serving real listings.
+            // Successfully extracted offers are direct evidence of content, so they win over the
+            // heuristic; classification only decides how to describe an empty result.
+            let (candidates, diagnostics) = parser.parse(html: html, baseURL: searchURL)
+            if !candidates.isEmpty {
+                return result(.success, candidates,
+                              "\(candidates.count) offers via \(diagnostics.strategyUsed ?? "?")")
+            }
+
             switch PageClassifier.classify(html: html, httpStatus: status) {
             case .blocked:
                 return result(.blocked, [], "HTTP \(status ?? 0): blocked page detected")
@@ -50,16 +62,9 @@ struct CeneoWebSearchProvider: SearchProvider {
             case .unknown:
                 return result(.fallbackOnly, [], "Page too small/unknown structure")
             case .content:
-                break
-            }
-
-            let (candidates, diagnostics) = parser.parse(html: html, baseURL: searchURL)
-            if candidates.isEmpty {
                 return result(.fallbackOnly, [],
                               "Parsed 0 offers (strategy: \(diagnostics.strategyUsed ?? "none"))")
             }
-            return result(.success, candidates,
-                          "\(candidates.count) offers via \(diagnostics.strategyUsed ?? "?")")
         } catch HTTPError.offline {
             return result(.offline, [], "No network connection")
         } catch {

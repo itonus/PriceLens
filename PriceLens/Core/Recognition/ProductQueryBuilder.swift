@@ -129,12 +129,28 @@ struct ProductQueryBuilder: Sendable {
         "tel", "fax", "faks", "mail", "email", "www", "biuro", "sp", "zoo", "ooo", "sooo"
     ]
 
+    /// Shelf-life / regulatory boilerplate, in the languages that share one EU package:
+    /// "termin ważności nieograniczony", "срок годности не ограничен", "Термін придатності не
+    /// обмежений", "neribotas galiojimo laikas", "derīguma termiņš neierobežots",
+    /// "kõlblikkuse aeg piiramata", "PRODUKT POSIADA ATEST PZH". These are long, wordy lines, so
+    /// they easily win the "most informative phrase" heuristic and become the product title.
+    private static let boilerplateMarkers: Set<String> = [
+        // expiry / shelf life
+        "waznosci", "ważności", "godnosti", "годности", "pridatnosti", "придатності",
+        "galiojimo", "deriguma", "derīguma", "termins", "termiņš", "kolblikkuse", "kõlblikkuse",
+        "nieograniczony", "ограничен", "обмежений", "neribotas", "neierobezots", "neierobežots",
+        "piiramata", "expiry", "bestbefore",
+        // certification / regulatory
+        "atest", "pzh", "norms", "normy", "gost", "гост", "сертификат",
+    ]
+
     private func isNoiseLabelLine(_ line: String) -> Bool {
         let tokens = TextNormalizer.tokens(line)
         guard let first = tokens.first else { return false }
         if Self.noiseLineStarters.contains(first) { return true }
         // Address markers can appear anywhere in the line, not only at the start.
         if tokens.contains(where: { Self.addressMarkers.contains($0) }) { return true }
+        if tokens.contains(where: { Self.boilerplateMarkers.contains($0) }) { return true }
         // Postal codes ("06-400") are a strong address signal on their own.
         if line.range(of: #"\b\d{2}-\d{3}\b"#, options: .regularExpression) != nil { return true }
         return false

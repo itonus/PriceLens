@@ -136,4 +136,20 @@ struct ProductQueryBuilderTests {
         #expect(!result.query.contains("g.29"))
         #expect(!result.query.contains("29"))
     }
+
+    /// Regression: multilingual shelf-life boilerplate is long and wordy, so it easily won the
+    /// "most informative phrase" heuristic and became the product title
+    /// ("Термін придатності не обмежений" showed as the scanned product name).
+    @Test func shelfLifeBoilerplateExcludedFromIdentity() {
+        let result = builder.build(barcode: "8004260487900", recognizedText: [
+            "termin ważności nieograniczony",
+            "срок годности не ограничен",
+            "Термін придатності не обмежений",
+            "neribotas galiojimo laikas",
+            "kõlblikkuse aeg piiramata",
+            "PRODUKT POSIADA ATEST PZH",
+        ])
+        #expect(result.model == nil)
+        #expect(result.query.isEmpty, "No real product text present — must not invent a title")
+    }
 }
