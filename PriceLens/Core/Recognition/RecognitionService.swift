@@ -126,8 +126,12 @@ final class RecognitionService {
 
         switch observation.kind {
         case .barcode(let value, let symbology):
-            guard let normalized = BarcodeNormalizer.normalize(value, symbology: symbology),
-                  normalized.isCheckDigitValid else { return nil }
+            // A failed check digit blocks *automatic* locking, where a misread would silently
+            // pick the wrong product. An explicit tap is different: the user is pointing at the
+            // barcode they want, and refusing it just makes the overlay feel dead — nothing
+            // happens and there is no way to know why. Honour the tap; a genuinely misread code
+            // simply returns no offers, which the UI states plainly.
+            guard let normalized = BarcodeNormalizer.normalize(value, symbology: symbology) else { return nil }
             return buildCandidate(barcode: (normalized.value, observation), observations: observations, texts: texts, prices: prices)
         case .text:
             let result = queryBuilder.build(barcode: nil, recognizedText: texts)

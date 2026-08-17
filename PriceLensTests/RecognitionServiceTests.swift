@@ -88,4 +88,15 @@ struct RecognitionServiceTests {
         let result = service.process(frame)
         #expect(result.lock == nil)
     }
+
+    /// An explicit tap outranks the check-digit heuristic: the user is pointing at the barcode
+    /// they want. Auto-locking still refuses it (see invalidCheckDigitBarcodeNotLockable) —
+    /// otherwise a silent misread could pick the wrong product on its own.
+    @Test func invalidCheckDigitBarcodeIsSelectableByTap() {
+        let service = RecognitionService()
+        let observation = obs(kind: .barcode(value: "5901234123458", symbology: "EAN13"),
+                              bounds: .zero, ageMs: 900)
+        let candidate = service.lock(observation: observation, in: [observation])
+        #expect(candidate?.barcodeValue == "5901234123458")
+    }
 }
