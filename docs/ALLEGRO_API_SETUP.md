@@ -23,7 +23,33 @@ Go to <https://apps.developer.allegro.pl> and create an application.
 Do **not** grant `profile`, `billing`, `payments`, `orders`, or any `:write` scope. The app has no
 use for them.
 
-## 2. Generate a User-Agent
+## ⚠️ 2. Application verification is required — read this first
+
+**Registering an application is not enough to search offers.** Allegro gates offer and product
+search behind manual application verification. With valid, working credentials you will still get:
+
+```
+HTTP 403
+{"code":"VerificationRequired",
+ "userMessage":"No access to the specified resource.
+                Access is possible only for verified applications."}
+```
+
+Verified against a real registered application (2026-08):
+
+| Endpoint | Result |
+|---|---|
+| `POST /auth/oauth/token` (`client_credentials`) | ✅ 200 — token issued |
+| `GET /sale/categories` | ✅ 200 — token is valid |
+| `GET /sale/matching-categories` | ✅ 200 |
+| `GET /offers/listing` | ❌ 403 `VerificationRequired` |
+| `GET /sale/products` | ❌ 403 `AccessDeniedException` |
+
+So the credentials work; the *permission* is missing. No code change unlocks this — request
+verification for your application in the Allegro developer console. Until it is granted, PriceLens
+correctly reports "Allegro app not verified" and falls back to a search link.
+
+## 3. Generate a User-Agent
 
 In the developer console, open **Generator i Walidator User-Agent** and generate one for your app.
 

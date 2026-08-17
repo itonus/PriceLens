@@ -140,8 +140,17 @@ struct AllegroAPISearchProvider: SearchProvider {
             let (data, response) = try await session.data(for: apiRequest)
             guard let http = response as? HTTPURLResponse else { return result(.failed, [], "Invalid response") }
             guard http.statusCode == 200 else {
+                // 403 here is normally `VerificationRequired`: valid credentials, but Allegro
+                // gates offer search behind manual application verification. Surface that
+                // specifically — it is an account state to resolve, not a bug to retry.
+                var summary = "Listing HTTP \(http.statusCode)"
+                if http.statusCode == 403,
+                   let body = String(data: data, encoding: .utf8),
+                   body.contains("VerificationRequired") {
+                    summary = "Allegro app not verified — offer search requires verification"
+                }
                 return result(http.statusCode == 401 || http.statusCode == 403 ? .blocked : .failed,
-                              [], "Listing HTTP \(http.statusCode)")
+                              [], summary)
             }
 
             let decoded = try JSONDecoder().decode(ListingResponse.self, from: data)

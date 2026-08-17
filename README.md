@@ -31,7 +31,7 @@ Being straight about this matters more than a nice feature list.
 | Barcode → product name + image | ✅ Works for food/grocery items |
 | Barcode → product for non-food | ⚠️ Often unavailable — Open Food Facts is a *food* database |
 | Shelf price OCR + comparison | ✅ Works when a price is legible in frame |
-| Allegro offers (with API credentials) | ⚠️ Implemented; needs your own credentials to verify |
+| Allegro offers (with API credentials) | ❌ Blocked — Allegro requires **manual app verification** for offer search |
 | Allegro offers (without credentials) | ❌ Falls back to opening a search link |
 | Google Shopping offers | ❌ **Not possible** — see below |
 | Local history, i18n, accessibility | ✅ Works |
@@ -48,8 +48,27 @@ consent wall, and **this project will not click through consent or anti-bot chal
 So Google is a one-tap fallback link, not a source of in-app offers. Rather than fake it, the app
 says "results couldn't be read" and hands you the link.
 
-Allegro's public listing pages are likewise served behind a DataDome interstitial, which is why the
-official API is the only supported path for real Allegro offers.
+### Why Allegro offers don't work either
+
+Two independent walls:
+
+1. **Public listing pages** are served behind a DataDome anti-bot interstitial — scraping returns a
+   CAPTCHA, and this project does not bypass challenges.
+2. **The official API** issues a valid `client_credentials` token, but every offer/product search
+   endpoint returns `403 VerificationRequired` — Allegro grants that access only to **manually
+   verified applications**. Registering an app is not sufficient.
+
+The API client is implemented and correct; it starts returning offers the moment an application is
+verified. Until then the app reports "Allegro app not verified" and offers a search link. See
+[docs/ALLEGRO_API_SETUP.md](docs/ALLEGRO_API_SETUP.md) for the endpoint-by-endpoint test results.
+
+### The honest bottom line
+
+**There is currently no working source of in-app price cards.** Both providers are gated in ways no
+client-side code can legitimately solve. Getting real prices requires either an approved Allegro
+application, a commercial pricing API, or a backend — all of which conflict with this project's
+no-backend, no-paid-API constraints. Product *identification* works well; price *comparison* is
+where reality bites.
 
 ## Requirements
 
